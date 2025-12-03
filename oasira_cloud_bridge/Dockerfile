@@ -8,12 +8,14 @@ COPY oasira-matter/package.json oasira-matter/pnpm-lock.yaml oasira-matter/pnpm-
 COPY oasira-matter/biome.json ./
 COPY oasira-matter/packages/common ./packages/common
 COPY oasira-matter/packages/frontend ./packages/frontend
-COPY oasira-matter/apps ./apps
 
-# Install pnpm and build frontend
+# Create a minimal apps directory structure for version reference only
+RUN mkdir -p apps/oasira-matter && \
+    echo '{"name":"@oasira-matter/app","version":"1.0.0"}' > apps/oasira-matter/package.json
+
+# Install pnpm and build frontend (only common and frontend packages)
 RUN npm install -g pnpm@10.20.0 && \
-    (pnpm install --no-frozen-lockfile --no-optional || \
-     pnpm install --no-frozen-lockfile --force) && \
+    pnpm install --no-frozen-lockfile --filter @oasira-matter/common --filter @oasira-matter/frontend && \
     pnpm --filter @oasira-matter/common run build && \
     pnpm --filter @oasira-matter/frontend run build
 
