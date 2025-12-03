@@ -422,59 +422,18 @@ async def serve_dashboard():
     
     print(f"📊 Starting Oasira Dashboard server on port {dashboard_port}...")
     
-    # CORS middleware to allow cross-origin requests
-    @web.middleware
-    async def cors_middleware(request, handler):
-        # Handle preflight OPTIONS requests
-        if request.method == 'OPTIONS':
-            response = web.Response()
-        else:
-            response = await handler(request)
-        
-        # Add CORS headers
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-        response.headers['Access-Control-Max-Age'] = '3600'
-        return response
+    app = web.Application()
     
-    app = web.Application(middlewares=[cors_middleware])
-    
-    # API proxy endpoint to avoid CORS issues
-    async def api_proxy(request):
-        # Get the target URL from query parameter or path
-        target_url = request.match_info.get('path', '')
-        if not target_url.startswith('http'):
-            target_url = f"https://cust.effortlesshome.co/{target_url}"
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                # Forward the request
-                async with session.request(
-                    method=request.method,
-                    url=target_url,
-                    headers={k: v for k, v in request.headers.items() 
-                            if k.lower() not in ['host', 'connection']},
-                    data=await request.read() if request.method in ['POST', 'PUT', 'PATCH'] else None
-                ) as resp:
-                    body = await resp.read()
-                    return web.Response(
-                        body=body,
-                        status=resp.status,
-                        headers=resp.headers
-                    )
-        except Exception as e:
-            print(f"API proxy error: {e}")
-            return web.Response(text=str(e), status=500)
-    
-    # Add API proxy routes
-    app.router.add_route('*', '/api/{path:.*}', api_proxy)
-    
-    # Root route - serve index.html
+    # Root route - serve index.html with proper headers
     async def index_handler(request):
         index_file = dashboard_path / 'index.html'
         if index_file.exists():
-            return web.FileResponse(index_file)
+            response = web.FileResponse(index_file)
+            # Disable caching for index.html to ensure fresh loads
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            return response
         else:
             return web.Response(text="Dashboard not available", status=404)
     
