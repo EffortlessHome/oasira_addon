@@ -1,0 +1,60 @@
+{
+  "name": "@oasira-matter/root",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.20.0",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "cleanup": "pnpm -r run cleanup && pnpm run cleanup:root",
+    "cleanup:root": "npx rimraf node_modules",
+    "lint": "biome check",
+    "lint:fix": "biome check --write",
+    "pretest": "pnpm run build:minimum",
+    "test": "pnpm -r run test",
+    "build": "pnpm -r run build",
+    "build:minimum": "pnpm --filter @oasira-matter/common run build",
+    "build:app": "pnpm --filter './packages/*' run build",
+    "preserve": "pnpm run build:minimum",
+    "serve": "pnpm -r --parallel run serve",
+    "start": "pnpm run serve",
+    "preproduction": "pnpm run build:app",
+    "production": "pnpm --filter oasira run start",
+    "check-updates": "npx npm-check-updates --workspaces --root -u",
+    "release": "semantic-release",
+    "release:version": "pnpm version --workspaces --no-workspaces-update --no-git-tag-version --allow-same-version",
+    "release:pack": "pnpm --filter oasira run bundle",
+    "release:publish": "pnpm publish apps/oasira-matter/package.tgz --provenance --no-git-checks --access public --loglevel verbose --tag ${CHANNEL:-latest}"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "docs"
+  ],
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.7",
+    "@dotenvx/dotenvx": "^1.51.1",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/github": "^12.0.2",
+    "@semantic-release/release-notes-generator": "^14.1.0",
+    "@swc-node/register": "~1.11.1",
+    "@swc/core": "~1.15.3",
+    "@swc/helpers": "~0.5.17",
+    "conventional-changelog-conventionalcommits": "^9.1.0",
+    "esbuild": "^0.27.0",
+    "esbuild-plugin-noexternal": "^0.1.6",
+    "globals": "^16.5.0",
+    "nodemon": "^3.1.11",
+    "npm-check-updates": "^19.1.2",
+    "rimraf": "^6.1.2",
+    "semantic-release": "^25.0.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.4",
+    "vitest": "^4.0.13"
+  }
+}

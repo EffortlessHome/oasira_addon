@@ -228,129 +228,63 @@ async def start_cloudflared():
 
 
 async def start_matterhub():
-    """Install and start Home Assistant Matter Hub."""
-
-    if not ha_url or not ha_token:
-        print("HA_URL or HA_TOKEN environment variables not set. Cannot start Oasira.")
-        return
-
-    # Step 1: install npm if not present
-    npm_installed = False
-    try:
-        proc_check_npm = await asyncio.create_subprocess_exec("npm", "--version", stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-        await proc_check_npm.wait()
-        if proc_check_npm.returncode == 0:
-            print("npm is already installed.")
-            npm_installed = True
-    except FileNotFoundError:
-        print("npm not found.")
-
-    if not npm_installed:
-        print("Installing npm via apk...")
-        try:
-            proc_apk = await asyncio.create_subprocess_exec(
-                "apk", "add", "npm",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            out, err = await proc_apk.communicate()
-            if out:
-                print(f"apk stdout: {out.decode()}")
-            if err:
-                print(f"apk stderr: {err.decode()}")
-            if proc_apk.returncode != 0:
-                print(f"apk add npm failed with code {proc_apk.returncode}")
-                return
-        except FileNotFoundError:
-            print("apk not available in this environment. Cannot install npm.")
-            return
-
-    # Step 2: Check or install home-assistant-matter-hub
-    hamh_installed = False
-    try:
-        proc_check_hamh = await asyncio.create_subprocess_exec(
-            "home-assistant-matter-hub", "--help",
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        await proc_check_hamh.wait()
-        if proc_check_hamh.returncode == 0:
-            print("home-assistant-matter-hub is already installed.")
-            hamh_installed = True
-    except FileNotFoundError:
-        print("home-assistant-matter-hub not found.")
-
-    if not hamh_installed:
-        print("Installing home-assistant-matter-hub globally...")
-        proc_npm = await asyncio.create_subprocess_exec(
-            "npm", "install", "-g", "home-assistant-matter-hub",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        out, err = await proc_npm.communicate()
-        if out:
-            print(f"npm stdout: {out.decode()}")
-        if err:
-            print(f"npm stderr: {err.decode()}")
-        if proc_npm.returncode != 0:
-            print(f"npm install failed with code {proc_npm.returncode}")
-            return
-        else:
-            print("home-assistant-matter-hub installed successfully.")
-
-    # Step 3: Run home-assistant-matter-hub in the background
-    print("Starting home-assistant-matter-hub...")
+    """Start the integrated Oasira Matter server."""
     
-    CONFIG_PATH = "/data/options.json"  # Home Assistant injects add-on config here
-    STORAGE_PATH = "/data/matterhub"    # /data is persistent storage
-    HAMH_BINARY = "/usr/local/bin/home-assistant-matter-hub"
-
-    if not os.path.exists(CONFIG_PATH):
-        print("⚠️ No options.json found.")
+    if not ha_url or not ha_token:
+        print("HA_URL or HA_TOKEN environment variables not set. Cannot start Matter Hub.")
         return
-
-    with open(CONFIG_PATH, "r") as f:
-        options = json.load(f)
+    
+    STORAGE_PATH = "/data/matter"
+    MATTER_BACKEND = "/app/matter-backend"
     
     os.makedirs(STORAGE_PATH, exist_ok=True)
-
+    
+    print("🔗 Starting Oasira Matter server...")
+    
     try:
-        proc_hamh = await asyncio.create_subprocess_exec(
-            "home-assistant-matter-hub", "start",
+        # Start the Node.js matter backend on internal port 8481
+        proc_matter = await asyncio.create_subprocess_exec(
+            "node",
+            f"{MATTER_BACKEND}/cli.js",
+            "start",
             f"--home-assistant-url={ha_url}",
-            f"--home-assistant-access-token={ha_token}",     
-            "--log-level=debug",
-            "--http-port=8482",
+            f"--home-assistant-access-token={ha_token}",
+            "--log-level=info",
+            "--http-port=8481",
             f"--storage-location={STORAGE_PATH}",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=MATTER_BACKEND,
         )
-
+        
         async def log_output(stream, prefix):
             while True:
                 line = await stream.readline()
                 if not line:
                     break
                 print(f"{prefix}: {line.decode().strip()}")
-
+        
         # Start logging tasks
-        asyncio.create_task(log_output(proc_hamh.stdout, "matterhub-out"))
-        asyncio.create_task(log_output(proc_hamh.stderr, "matterhub-err"))
-
-        print(f"home-assistant-matter-hub process started with PID {proc_hamh.pid}")
-
-        # Prevent the loop from closing before the subprocess ends
+        asyncio.create_task(log_output(proc_matter.stdout, "matter-out"))
+        asyncio.create_task(log_output(proc_matter.stderr, "matter-err"))
+        
+        print(f"✅ Oasira Matter server started with PID {proc_matter.pid}")
+        
+        # Keep the process running
         try:
-            await proc_hamh.wait()
+            await proc_matter.wait()
         except asyncio.CancelledError:
-            print("Shutting down home-assistant-matter-hub...")
-            proc_hamh.terminate()
-            await proc_hamh.wait()
-
-    except FileNotFoundError:
-        print("home-assistant-matter-hub command not found after install. Check PATH or npm global install.")
+            print("Shutting down Oasira Matter server...")
+            proc_matter.terminate()
+            await proc_matter.wait()
+            
+    except FileNotFoundError as e:
+        print(f"❌ Matter backend not found: {e}")
+        print("   Ensure the Docker build completed successfully")
     except Exception as exc:
-        print(f"Error running home-assistant-matter-hub: {exc}")
+        print(f"❌ Error running Oasira Matter server: {exc}")
+        import traceback
+        traceback.print_exc()
 
 
 async def register_with_server():
@@ -412,19 +346,83 @@ async def connect_to_cloud():
 
 
 async def serve_dashboard():
-    """Serve the Oasira dashboard on the configured port."""
+    """Serve the Oasira dashboard on the configured port with Matter integration."""
     dashboard_path = Path("/app/dist")
+    matter_frontend_path = Path("/app/matter-frontend")
     
     if not dashboard_path.exists():
         print(f"⚠️ Dashboard files not found at {dashboard_path}")
         print("   Dashboard will not be available")
         return
     
-    print(f"📊 Starting Oasira Dashboard server on port {dashboard_port}...")
+    print(f"📊 Starting unified Oasira server on port {dashboard_port}...")
     
     app = web.Application()
     
-    # Root route - serve index.html with proper headers
+    # Reverse proxy handler for Matter API
+    async def matter_proxy_handler(request):
+        """Forward requests to the Matter backend server."""
+        # Remove /matter prefix from path before forwarding
+        proxied_path = request.path.replace('/matter', '', 1)
+        if not proxied_path:
+            proxied_path = '/'
+        
+        target_url = f"http://localhost:8481{proxied_path}"
+        if request.query_string:
+            target_url += f"?{request.query_string.decode()}"
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Prepare headers with forwarded prefix for proper URL handling
+                headers = {k: v for k, v in request.headers.items() 
+                          if k.lower() not in ['host', 'connection']}
+                headers['X-Forwarded-Prefix'] = '/matter'
+                
+                # Forward the request to the Matter backend
+                async with session.request(
+                    method=request.method,
+                    url=target_url,
+                    headers=headers,
+                    data=await request.read() if request.can_read_body else None,
+                    allow_redirects=False
+                ) as resp:
+                    # Create response with same status and headers
+                    response = web.Response(
+                        status=resp.status,
+                        headers={k: v for k, v in resp.headers.items() 
+                                if k.lower() not in ['connection', 'transfer-encoding']},
+                        body=await resp.read()
+                    )
+                    return response
+        except aiohttp.ClientError as e:
+            print(f"❌ Matter proxy error: {e}")
+            return web.Response(text=f"Matter service unavailable: {e}", status=503)
+    
+    # Matter UI handler - serve index.html with base path
+    async def matter_ui_handler(request):
+        """Serve the Matter frontend."""
+        index_file = matter_frontend_path / 'index.html'
+        if index_file.exists():
+            with open(index_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+            # Replace base path for Matter UI if it has a BASE placeholder
+            if '<!-- BASE -->' in content:
+                content = content.replace(
+                    '<!-- BASE -->',
+                    '<base href="/matter/" />'
+                ).replace(
+                    '<!-- /BASE -->',
+                    ''
+                )
+            response = web.Response(text=content, content_type='text/html')
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            return response
+        else:
+            return web.Response(text="Matter UI not available", status=404)
+    
+    # Main dashboard handler
     async def index_handler(request):
         index_file = dashboard_path / 'index.html'
         if index_file.exists():
@@ -437,12 +435,23 @@ async def serve_dashboard():
         else:
             return web.Response(text="Dashboard not available", status=404)
     
+    # Register routes - order matters!
+    # Matter API routes (proxy to Node.js backend)
+    app.router.add_route('*', '/matter/api/{path:.*}', matter_proxy_handler)
+    
+    # Matter UI routes
+    if matter_frontend_path.exists():
+        app.router.add_get('/matter/', matter_ui_handler)
+        app.router.add_get('/matter/index.html', matter_ui_handler)
+        app.router.add_static('/matter/', path=matter_frontend_path, name='matter-static')
+        app.router.add_get('/matter/{path:.*}', matter_ui_handler)
+        print("✅ Matter UI integrated at /matter/")
+    else:
+        print(f"⚠️ Matter frontend not found at {matter_frontend_path}")
+    
+    # Main dashboard routes
     app.router.add_get('/', index_handler)
-    
-    # Serve static files (assets, js, css, etc)
     app.router.add_static('/', path=dashboard_path, name='static', show_index=True)
-    
-    # Catch-all route for SPA routing (must be last)
     app.router.add_get('/{path:.*}', index_handler)
     
     runner = web.AppRunner(app)
@@ -450,7 +459,9 @@ async def serve_dashboard():
     site = web.TCPSite(runner, '0.0.0.0', dashboard_port)
     await site.start()
     
-    print(f"✅ Dashboard server running at http://0.0.0.0:{dashboard_port}")
+    print(f"✅ Unified server running at http://0.0.0.0:{dashboard_port}")
+    print(f"   - Main Dashboard: http://0.0.0.0:{dashboard_port}/")
+    print(f"   - Matter Hub: http://0.0.0.0:{dashboard_port}/matter/")
     
     # Keep running
     while True:

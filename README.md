@@ -16,7 +16,20 @@ Add this repository to your Home Assistant instance:
 
 ### Oasira Cloud Bridge
 
-Connect your Home Assistant to Oasira Cloud services with Cloudflare Tunnel, Matter Hub integration, and web dashboard.
+Connect your Home Assistant to Oasira Cloud services with:
+- **Cloudflare Tunnel** - Secure remote access
+- **Matter Hub Integration** - Matter protocol bridge for smart home devices
+- **Unified Web Dashboard** - Single interface for all features
+
+#### Features
+
+- **Main Dashboard** (accessible at `/`) - Monitor and manage Oasira services
+- **Matter Hub UI** (accessible at `/matter/`) - Configure and manage Matter devices
+- Single port (8080) for both interfaces
+- Automatic authentication using Oasira credentials
+- Persistent storage for Matter devices
+
+See [MATTER_INTEGRATION.md](MATTER_INTEGRATION.md) for technical details about the Matter integration.
 
 ## Support
 
