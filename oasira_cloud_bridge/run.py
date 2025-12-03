@@ -440,6 +440,36 @@ async def serve_dashboard():
     
     app = web.Application(middlewares=[cors_middleware])
     
+    # API proxy endpoint to avoid CORS issues
+    async def api_proxy(request):
+        # Get the target URL from query parameter or path
+        target_url = request.match_info.get('path', '')
+        if not target_url.startswith('http'):
+            target_url = f"https://cust.effortlesshome.co/{target_url}"
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Forward the request
+                async with session.request(
+                    method=request.method,
+                    url=target_url,
+                    headers={k: v for k, v in request.headers.items() 
+                            if k.lower() not in ['host', 'connection']},
+                    data=await request.read() if request.method in ['POST', 'PUT', 'PATCH'] else None
+                ) as resp:
+                    body = await resp.read()
+                    return web.Response(
+                        body=body,
+                        status=resp.status,
+                        headers=resp.headers
+                    )
+        except Exception as e:
+            print(f"API proxy error: {e}")
+            return web.Response(text=str(e), status=500)
+    
+    # Add API proxy routes
+    app.router.add_route('*', '/api/{path:.*}', api_proxy)
+    
     # Root route - serve index.html
     async def index_handler(request):
         index_file = dashboard_path / 'index.html'
