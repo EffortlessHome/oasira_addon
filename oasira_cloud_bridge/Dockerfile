@@ -4,14 +4,14 @@ FROM node:22-alpine AS matter-builder
 WORKDIR /build
 
 # Copy oasira-matter workspace files
-COPY oasira-matter/package.json oasira-matter/pnpm-lock.yaml oasira-matter/pnpm-workspace.yaml ./
+COPY oasira-matter/package.json oasira-matter/pnpm-lock.yaml ./
 COPY oasira-matter/biome.json ./
 COPY oasira-matter/packages/common ./packages/common
 COPY oasira-matter/packages/frontend ./packages/frontend
 
-# Create a minimal apps directory structure for version reference only
-RUN mkdir -p apps/oasira-matter && \
-    echo '{"name":"@oasira-matter/app","version":"1.0.0"}' > apps/oasira-matter/package.json
+# Create modified pnpm-workspace.yaml without apps directory
+RUN echo 'packages:' > pnpm-workspace.yaml && \
+    echo '  - "packages/*"' >> pnpm-workspace.yaml
 
 # Install pnpm and build frontend (only common and frontend packages)
 RUN npm install -g pnpm@10.20.0 && \
