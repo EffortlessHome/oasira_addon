@@ -1,4 +1,23 @@
-# Simple single-stage build
+# Multi-stage build for oasira-matter frontend
+FROM node:22-alpine AS matter-builder
+
+WORKDIR /build
+
+# Copy oasira-matter workspace files
+COPY oasira-matter/package.json oasira-matter/pnpm-lock.yaml oasira-matter/pnpm-workspace.yaml ./
+COPY oasira-matter/biome.json ./
+COPY oasira-matter/packages/common ./packages/common
+COPY oasira-matter/packages/frontend ./packages/frontend
+COPY oasira-matter/apps ./apps
+
+# Install pnpm and build frontend
+RUN npm install -g pnpm@10.20.0 && \
+    (pnpm install --no-frozen-lockfile --no-optional || \
+     pnpm install --no-frozen-lockfile --force) && \
+    pnpm --filter @oasira-matter/common run build && \
+    pnpm --filter @oasira-matter/frontend run build
+
+# Main runtime image
 FROM ghcr.io/home-assistant/aarch64-base:latest
 
 # Install Python only
@@ -25,8 +44,8 @@ RUN python3 -m venv /venv \
 # Copy dashboard dist folder (includes .gitkeep if empty)
 COPY dist /app/dist
 
-# Note: Matter Hub functionality is now fully integrated in Python
-# No separate frontend needed - all Matter API endpoints are Python-based
+# Copy built oasira-matter frontend from builder stage
+COPY --from=matter-builder /build/packages/frontend/dist /app/matter-frontend
 
 ENV PATH="/venv/bin:$PATH"
 
