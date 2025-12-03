@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "../Oasira_B2B"
+		},
+		{
+			"path": "../Oasira_API"
+		},
+		{
+			"path": "."
+		},
+		{
+			"path": "../oasira-dashboard"
+		}
+	],
+	"settings": {}
+}

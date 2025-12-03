@@ -1,0 +1,35 @@
+name: "Oasira Cloud Bridge"
+version: "1.1.2"
+slug: "oasira_bridge"
+description: "Connects Home Assistant to the Oasira Cloud WebSocket service and registers connection info"
+startup: services
+boot: auto
+init: false
+host_network: true
+privileged:
+  - NET_ADMIN
+  - SYS_ADMIN
+hassio_api: true
+homeassistant_api: true
+ingress: true
+panel_icon: mdi:view-dashboard
+panel_title: Oasira Dashboard
+arch:
+  - amd64
+  - aarch64
+options:
+  email: ""
+  password: ""
+  system_id: ""
+  ha_url: "http://homeassistant.local:8123"
+  dashboard_port: 8080
+schema:
+  email: str
+  password: password
+  system_id: str?
+  ha_url: str
+  dashboard_port: int
+ports:
+  8080/tcp: 8080
+environment:
+  TUNNEL_ORIGIN_CERT: /cert.pem
