@@ -317,9 +317,8 @@ async def connect_to_cloud():
 
 
 async def serve_dashboard():
-    """Serve the Oasira dashboard with integrated Matter Hub on the same port."""
+    """Serve the Oasira dashboard with integrated Matter Hub API."""
     dashboard_path = Path("/app/dist")
-    matter_frontend_path = Path("/app/matter-frontend")
     
     if not dashboard_path.exists():
         print(f"⚠️ Dashboard files not found at {dashboard_path}")
@@ -418,25 +417,6 @@ async def serve_dashboard():
         }
         return web.json_response(devices)
     
-    # Matter UI handler - serve index.html with base path
-    async def matter_ui_handler(request):
-        """Serve the Matter frontend."""
-        index_file = matter_frontend_path / 'index.html'
-        if index_file.exists():
-            with open(index_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-            # Set base path for Matter UI assets
-            if '<base' not in content:
-                # Insert base tag in head if not present
-                content = content.replace('<head>', '<head>\n  <base href="/matter/" />', 1)
-            response = web.Response(text=content, content_type='text/html')
-            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-            response.headers['Pragma'] = 'no-cache'
-            response.headers['Expires'] = '0'
-            return response
-        else:
-            return web.Response(text="Matter UI not available", status=404)
-    
     # Main dashboard handler
     async def index_handler(request):
         index_file = dashboard_path / 'index.html'
@@ -451,25 +431,17 @@ async def serve_dashboard():
             return web.Response(text="Dashboard not available", status=404)
     
     # Register routes - order matters!
-    # Matter API routes
-    app.router.add_get('/matter/api/', matter_api_root)
-    app.router.add_get('/matter/api/matter/bridges', matter_api_bridges_list)
-    app.router.add_post('/matter/api/matter/bridges', matter_api_bridges_create)
-    app.router.add_get('/matter/api/matter/bridges/{bridgeId}', matter_api_bridges_get)
-    app.router.add_put('/matter/api/matter/bridges/{bridgeId}', matter_api_bridges_update)
-    app.router.add_delete('/matter/api/matter/bridges/{bridgeId}', matter_api_bridges_delete)
-    app.router.add_get('/matter/api/matter/bridges/{bridgeId}/actions/factory-reset', matter_api_bridges_reset)
-    app.router.add_get('/matter/api/matter/bridges/{bridgeId}/devices', matter_api_bridges_devices)
+    # Matter API routes (Python-based backend)
+    app.router.add_get('/api/matter', matter_api_root)
+    app.router.add_get('/api/matter/bridges', matter_api_bridges_list)
+    app.router.add_post('/api/matter/bridges', matter_api_bridges_create)
+    app.router.add_get('/api/matter/bridges/{bridgeId}', matter_api_bridges_get)
+    app.router.add_put('/api/matter/bridges/{bridgeId}', matter_api_bridges_update)
+    app.router.add_delete('/api/matter/bridges/{bridgeId}', matter_api_bridges_delete)
+    app.router.add_get('/api/matter/bridges/{bridgeId}/actions/factory-reset', matter_api_bridges_reset)
+    app.router.add_get('/api/matter/bridges/{bridgeId}/devices', matter_api_bridges_devices)
     
-    # Matter UI routes (static frontend)
-    if matter_frontend_path.exists():
-        app.router.add_get('/matter/', matter_ui_handler)
-        app.router.add_get('/matter/index.html', matter_ui_handler)
-        app.router.add_static('/matter/', path=matter_frontend_path, name='matter-static', show_index=False)
-        print("✅ Matter Hub integrated at /matter/")
-        print("✅ Matter API integrated at /matter/api/")
-    else:
-        print(f"⚠️ Matter frontend not found at {matter_frontend_path}")
+    print("✅ Matter API integrated at /api/matter/")
     
     # Main dashboard routes
     app.router.add_get('/', index_handler)
@@ -483,8 +455,7 @@ async def serve_dashboard():
     
     print(f"✅ Unified server running at http://0.0.0.0:{dashboard_port}")
     print(f"   - Main Dashboard: http://0.0.0.0:{dashboard_port}/")
-    print(f"   - Matter Hub UI: http://0.0.0.0:{dashboard_port}/matter/")
-    print(f"   - Matter API: http://0.0.0.0:{dashboard_port}/matter/api/")
+    print(f"   - Matter API: http://0.0.0.0:{dashboard_port}/api/matter/")
     
     # Keep running
     while True:
