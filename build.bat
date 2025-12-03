@@ -1,16 +1,11 @@
 @echo off
 REM Build script for Oasira addon with dashboard
 
-echo Building Oasira Dashboard...
-cd ..\oasira-dashboard
-call npm install
-call npm run build
-
 echo Building Oasira Addon...
-cd ..\oasira_addon
+cd oasira_cloud_bridge
 
-REM Use the simple Dockerfile that copies pre-built files
-docker build -f Dockerfile.simple -t oasira-addon:latest ..
+REM Build the addon
+docker build -t oasira-addon:latest .
 
 echo Build complete!
-echo Dashboard will be available at http://[addon-ip]:8080
+echo To test locally, run: docker run -p 8080:8080 oasira-addon:latest
