@@ -8,9 +8,10 @@ COPY oasira-matter/package.json oasira-matter/pnpm-lock.yaml oasira-matter/pnpm-
 COPY oasira-matter/biome.json ./
 COPY oasira-matter/packages ./packages
 
-# Install pnpm and build
+# Install pnpm and build (with fallback for registry issues)
 RUN npm install -g pnpm@10.20.0 && \
-    pnpm install --no-frozen-lockfile && \
+    (pnpm install --no-frozen-lockfile --no-optional || \
+     pnpm install --no-frozen-lockfile --force) && \
     pnpm run build:app
 
 # Main runtime image
