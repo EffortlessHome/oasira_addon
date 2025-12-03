@@ -413,10 +413,11 @@ async def connect_to_cloud():
 
 async def serve_dashboard():
     """Serve the Oasira dashboard on the configured port."""
-    dashboard_path = Path("/var/www/dashboard")
+    dashboard_path = Path("/app/dist")
     
     if not dashboard_path.exists():
         print(f"⚠️ Dashboard files not found at {dashboard_path}")
+        print("   Dashboard will not be available")
         return
     
     print(f"📊 Starting Oasira Dashboard server on port {dashboard_port}...")
@@ -428,7 +429,11 @@ async def serve_dashboard():
     
     # Fallback to index.html for SPA routing
     async def index_handler(request):
-        return web.FileResponse(dashboard_path / 'index.html')
+        index_file = dashboard_path / 'index.html'
+        if index_file.exists():
+            return web.FileResponse(index_file)
+        else:
+            return web.Response(text="Dashboard not available", status=404)
     
     # Add catch-all route for SPA
     app.router.add_get('/{path:.*}', index_handler)

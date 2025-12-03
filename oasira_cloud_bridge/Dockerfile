@@ -21,6 +21,9 @@ RUN python3 -m venv /venv \
     && pip install --no-cache-dir -r /requirements.txt \
     && pip install --no-cache-dir aiohttp websockets==12.0 Brotli
 
+# Copy dashboard dist folder
+COPY dist /app/dist
+
 ENV PATH="/venv/bin:$PATH"
 
 CMD ["/run.sh"]
