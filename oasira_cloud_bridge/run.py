@@ -424,10 +424,7 @@ async def serve_dashboard():
     
     app = web.Application()
     
-    # Serve static files
-    app.router.add_static('/', path=dashboard_path, name='static')
-    
-    # Fallback to index.html for SPA routing
+    # Root route - serve index.html
     async def index_handler(request):
         index_file = dashboard_path / 'index.html'
         if index_file.exists():
@@ -435,7 +432,12 @@ async def serve_dashboard():
         else:
             return web.Response(text="Dashboard not available", status=404)
     
-    # Add catch-all route for SPA
+    app.router.add_get('/', index_handler)
+    
+    # Serve static files (assets, js, css, etc)
+    app.router.add_static('/', path=dashboard_path, name='static', show_index=True)
+    
+    # Catch-all route for SPA routing (must be last)
     app.router.add_get('/{path:.*}', index_handler)
     
     runner = web.AppRunner(app)
