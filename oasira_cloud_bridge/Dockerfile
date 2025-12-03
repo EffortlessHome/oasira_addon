@@ -10,7 +10,7 @@ COPY oasira-matter/packages ./packages
 
 # Install pnpm and build
 RUN npm install -g pnpm@10.20.0 && \
-    pnpm install --frozen-lockfile && \
+    pnpm install --no-frozen-lockfile && \
     pnpm run build:app
 
 # Main runtime image

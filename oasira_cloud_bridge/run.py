@@ -481,9 +481,9 @@ async def main():
     await asyncio.sleep(2)  # Give cloudflared a moment to start
     
     # Start Matter Hub
-    print("\n🔗 Starting Matter Hub...")
-    asyncio.create_task(start_matterhub())
-    await asyncio.sleep(2)  # Give matterhub a moment to start
+#print("\n🔗 Starting Matter Hub...")
+ #   asyncio.create_task(start_matterhub())
+ #   await asyncio.sleep(2)  # Give matterhub a moment to start
     
     # Start dashboard server in background
     print("\n📊 Starting Dashboard...")
