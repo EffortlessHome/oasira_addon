@@ -13,6 +13,10 @@ COPY oasira-matter/packages/frontend ./packages/frontend
 RUN echo 'packages:' > pnpm-workspace.yaml && \
     echo '  - "packages/*"' >> pnpm-workspace.yaml
 
+# Create stub apps/oasira-matter/package.json for frontend version import
+RUN mkdir -p apps/oasira-matter && \
+    echo '{"name":"@oasira-matter/oasira-matter","version":"1.0.0"}' > apps/oasira-matter/package.json
+
 # Install pnpm and build frontend (only common and frontend packages)
 RUN npm install -g pnpm@10.20.0 && \
     pnpm install --no-frozen-lockfile --filter @oasira-matter/common --filter @oasira-matter/frontend && \
