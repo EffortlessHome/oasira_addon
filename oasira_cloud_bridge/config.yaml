@@ -21,13 +21,13 @@ options:
   email: ""
   password: ""
   system_id: ""
-  ha_url: "http://homeassistant.local:8123"
+  matter_label: "favorite"
   dashboard_port: 8080
 schema:
   email: str
   password: password
   system_id: str?
-  ha_url: str
+  matter_label: str?
   dashboard_port: int
 ports:
   8080/tcp: 8080

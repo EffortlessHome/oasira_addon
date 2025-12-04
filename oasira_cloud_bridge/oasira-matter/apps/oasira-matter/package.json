@@ -1,16 +1,16 @@
 {
   "name": "oasira-matter",
-  "description": "Oasira Matter - Home Assistant Matter Bridge for seamless smart home integration",
-  "version": "0.0.0",
+  "description": "Oasira Matter - Home Assistant Matter Support",
+  "version": "1.0.0",
   "private": false,
   "type": "module",
   "bin": {
     "oasira-matter": "./dist/backend/cli.js"
   },
   "author": {
-    "email": "t0bst4r@outlook.com",
-    "name": "t0bst4r",
-    "url": "https://github.com/t0bst4r"
+    "email": "dev@oasira.ai",
+    "name": "Oasira Matter",
+    "url": "https://github.com/effortlesshome"
   },
   "keywords": [
     "oasira-matter",
@@ -32,10 +32,10 @@
     "smart-home"
   ],
   "bugs": {
-    "url": "https://github.com/t0bst4r/home-assistant-matter-hub/issues"
+    "url": "https://github.com/effortlesshome"
   },
   "license": "Apache-2.0",
-  "repository": "github:t0bst4r/home-assistant-matter-hub",
+  "repository": "",
   "scripts": {
     "cleanup": "npx rimraf node_modules dist pack LICENSE README.md",
     "build": "node build.js",

@@ -18,8 +18,8 @@
 ### Cloudflare Tunnel
 Automatically establishes a secure Cloudflare tunnel for remote access to your Home Assistant instance.
 
-### Matter Hub
-Integrates Home Assistant Matter Hub for advanced smart home device management.
+### Matter
+Adds Matter device export support to Home Assistant.
 
 ### Web Dashboard
 Provides a web interface for monitoring and managing your Oasira services.

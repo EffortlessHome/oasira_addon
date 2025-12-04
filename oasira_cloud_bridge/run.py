@@ -12,22 +12,19 @@ from oasira import OasiraAPIClient, OasiraAPIError
 SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN")
 SUPERVISOR_URL = "http://supervisor/core/api"
 
-# Load addon options
-with open("/data/options.json") as f:
-    options = json.load(f)
+# Configuration from environment variables (set via addon config or docker-compose)
+email = os.environ.get("EMAIL") or os.environ.get("OASIRA_EMAIL")
+password = os.environ.get("PASSWORD") or os.environ.get("OASIRA_PASSWORD")
+system_id = os.environ.get("SYSTEM_ID")  # Optional - will auto-select if not provided
+matter_label = os.environ.get("MATTER_LABEL", "favorite")  # Label for Matter device filter
+dashboard_port = int(os.environ.get("DASHBOARD_PORT", 8080))
 
-email = options.get("email")
-password = options.get("password")
-system_id = options.get("system_id")
-ha_url = options.get("ha_url", "http://homeassistant.local:8123")
-dashboard_port = options.get("dashboard_port", 8080)
-
-cloudflare_token = None
+# These will be populated from API response
+ha_url = None
 ha_token = None
-customer_psk = None
+cloudflare_token = None
 fullname = None
 emailaddress = None
-ha_external_url = None
 customer_id = None
 systemid = None
 testmode = None
@@ -41,9 +38,8 @@ CLIENT_ID = str(uuid.uuid4())  # Unique ID for this HA instance
 
 async def start():
     """Authenticate with Firebase OAuth and fetch system configuration."""
-    global cloudflare_token, ha_token, customer_psk, fullname, emailaddress
-    global ha_external_url, systemid, testmode, plan, trial_expiration
-    global customer_id, system_id, id_token
+    global cloudflare_token, ha_token, ha_url, fullname, emailaddress
+    global customer_id, system_id, systemid, testmode, plan, trial_expiration, id_token
 
     print("Starting OAuth authentication...")
 
@@ -67,9 +63,7 @@ async def start():
             print(f"✅ Firebase authentication successful (UID: {firebase_uid})")
 
         # Step 2: Fetch available systems for this user
-        async with OasiraAPIClient(
-            id_token=id_token
-        ) as client:
+        async with OasiraAPIClient(id_token=id_token) as client:
             print(f"📋 Fetching systems for {email}...")
             systems = await client.get_system_list_by_email(email)
             
@@ -117,25 +111,24 @@ async def start():
             print(f"🔍 Debug - customer_id: {customer_id}")
             print(f"🔍 Debug - system_id: {system_id}")
 
-        # Step 4: Fetch full system configuration
-        async with OasiraAPIClient(
-            system_id=system_id,
-            id_token=id_token
-        ) as client:
+        # Step 4: Fetch full system configuration using get_system_by_system_id
+        async with OasiraAPIClient(system_id=system_id, id_token=id_token) as client:
             print(f"📦 Fetching system configuration...")
-            print(f"🔍 Debug - API client initialized with system_id: {client.system_id}")
-            data = await client.get_customer_and_system()
+            system_data = await client.get_system_by_system_id(system_id)
 
-            customer_psk = data.get("psk")
-            fullname = data.get("fullname")
-            emailaddress = data.get("emailaddress")
-            ha_token = data.get("ha_security_token")
-            cloudflare_token = data.get("cloudflare_token")
-            ha_external_url = data.get("ha_url")
-            systemid = system_id
-            testmode = data.get("testmode")
-            plan = data.get("name")
-            trial_expiration = data.get("trial_expiration")
+            # Extract values from system configuration
+            ha_token = system_data.get("ha_token")
+            cloudflare_token = system_data.get("cloudflare_token")
+            ha_url = system_data.get("ha_url")
+            systemid = str(system_data.get("id"))
+            testmode = system_data.get("testmode")
+            
+            # Get customer info for display
+            customer_data = await client.get_customer_and_system()
+            fullname = customer_data.get("fullname")
+            emailaddress = customer_data.get("emailaddress")
+            plan = customer_data.get("name")
+            trial_expiration = customer_data.get("trial_expiration")
 
             print("="*50)
             print(f"✅ Login successful!")
@@ -364,17 +357,27 @@ async def serve_dashboard():
         else:
             return web.Response(text="Dashboard not available", status=404)
     
-    # Register routes - order matters!
-    # Matter API routes - proxy to Matter.js backend
+    # Static file handler
+    async def static_handler(request):
+        filename = request.match_info['filename']
+        filepath = dashboard_path / filename
+        if filepath.exists() and filepath.is_file():
+            return web.FileResponse(filepath)
+        # If file not found, serve index.html for SPA routing
+        return await index_handler(request)
+    
+    # Register routes - API routes first!
+    # Matter API routes - these are checked FIRST
     app.router.add_route('*', '/api/matter', proxy_to_matter_backend)
     app.router.add_route('*', '/api/matter/{path:.*}', proxy_to_matter_backend)
     
     print("✅ Matter API proxy configured at /api/matter/")
     
-    # Main dashboard routes
+    # Dashboard routes - these come AFTER API routes
     app.router.add_get('/', index_handler)
-    app.router.add_static('/', path=dashboard_path, name='static', show_index=True)
-    app.router.add_get('/{path:.*}', index_handler)
+    app.router.add_static('/assets', path=dashboard_path / 'assets', name='assets', show_index=False)
+    # Serve other static files and handle SPA routing (but API routes already matched above)
+    app.router.add_get('/{filename:.+}', static_handler)
     
     runner = web.AppRunner(app)
     await runner.setup()
@@ -392,10 +395,13 @@ async def serve_dashboard():
 
 async def start_matter_backend():
     """Start the Matter.js backend server."""
-    matter_backend_path = Path("/app/matter-backend")
+    cli_path = Path("/app/packages/backend/dist/cli.js")
     
-    if not matter_backend_path.exists():
-        print("⚠️ Matter backend not found, skipping...")
+    print(f"🔍 Checking Matter backend at {cli_path}")
+    print(f"   - CLI exists: {cli_path.exists()}")
+    
+    if not cli_path.exists():
+        print("⚠️ Matter backend cli.js not found, skipping...")
         return
     
     print("🔷 Starting Matter.js backend server...")
@@ -405,16 +411,24 @@ async def start_matter_backend():
     env["STORAGE_PATH"] = "/data/matter"
     env["HA_URL"] = ha_url
     env["HA_TOKEN"] = ha_token or ""
+    env["NODE_PATH"] = "/app/node_modules"
+    
+    print(f"   - HA_URL: {ha_url}")
+    print(f"   - Storage: /data/matter")
+    print(f"   - HTTP Port: 8482")
     
     try:
         # Start Matter backend as subprocess
         process = await asyncio.create_subprocess_exec(
             "node",
-            "/app/matter-backend/bundle.js",
+            str(cli_path),
             "start",
-            "--storage", "/data/matter",
+            "--storage-location", "/data/matter",
             "--http-port", "8482",
+            "--home-assistant-url", ha_url,
+            "--home-assistant-access-token", ha_token or "",
             env=env,
+            cwd="/app",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
@@ -438,6 +452,69 @@ async def start_matter_backend():
         
     except Exception as e:
         print(f"❌ Failed to start Matter backend: {e}")
+        import traceback
+        traceback.print_exc()
+
+async def ensure_default_bridge():
+    """Create a default Matter bridge if none exists."""
+    try:
+        # Wait for Matter backend to be ready (with retry logic)
+        max_retries = 30
+        retry_delay = 2
+        backend_ready = False
+        
+        print("⏳ Waiting for Matter backend to be ready...")
+        for attempt in range(max_retries):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get("http://localhost:8482/api/matter/bridges", timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                        if resp.status == 200:
+                            backend_ready = True
+                            print(f"✅ Matter backend is ready (attempt {attempt + 1})")
+                            break
+            except Exception:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay)
+                    
+        if not backend_ready:
+            print("⚠️ Matter backend did not become ready in time")
+            return
+            
+        # Check if any bridges exist
+        async with aiohttp.ClientSession() as session:
+            async with session.get("http://localhost:8482/api/matter/bridges") as resp:
+                if resp.status == 200:
+                    bridges = await resp.json()
+                    if len(bridges) == 0:
+                        print(f"📦 Creating default Matter bridge with label filter: '{matter_label}'...")
+                        
+                        # Create default bridge with configured label filter
+                        bridge_config = {
+                            "name": "Oasira Matter Bridge",
+                            "port": 5540,
+                            "filter": {
+                                "include": [{"type": "label", "value": matter_label}],
+                                "exclude": []
+                            }
+                        }
+                        
+                        async with session.post(
+                            "http://localhost:8482/api/matter/bridges",
+                            json=bridge_config,
+                            headers={"Content-Type": "application/json"}
+                        ) as create_resp:
+                            if create_resp.status == 201:
+                                bridge = await create_resp.json()
+                                print(f"✅ Created default bridge: {bridge.get('id')}")
+                            else:
+                                error = await create_resp.text()
+                                print(f"⚠️ Failed to create default bridge: {error}")
+                    else:
+                        print(f"✅ Found {len(bridges)} existing bridge(s)")
+                else:
+                    print(f"⚠️ Could not check bridges: HTTP {resp.status}")
+    except Exception as e:
+        print(f"⚠️ Could not create default bridge: {e}")
 
 async def main():
     success = await start()
@@ -455,6 +532,9 @@ async def main():
     print("\n🔷 Starting Matter Backend...")
     asyncio.create_task(start_matter_backend())
     await asyncio.sleep(2)  # Give Matter backend a moment to start
+    
+    # Ensure default bridge exists
+    asyncio.create_task(ensure_default_bridge())
     
     # Start unified dashboard server with integrated Matter UI
     print("\n📊 Starting Unified Dashboard...")
