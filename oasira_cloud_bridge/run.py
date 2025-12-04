@@ -4,6 +4,7 @@ import json
 import aiohttp
 import websockets
 import uuid
+import subprocess
 from pathlib import Path
 from aiohttp import web
 from oasira import OasiraAPIClient, OasiraAPIError
@@ -247,15 +248,36 @@ def load_matter_config():
         matter_bridges = {}
         os.makedirs(MATTER_STORAGE_PATH, exist_ok=True)
 
-def save_matter_config():
-    """Save Matter bridge configuration to disk."""
-    config_file = Path(MATTER_STORAGE_PATH) / "bridges.json"
-    os.makedirs(MATTER_STORAGE_PATH, exist_ok=True)
+# Matter Hub - proxy to Node.js backend
+MATTER_BACKEND_URL = "http://localhost:8482"  # Matter backend port
+
+async def proxy_to_matter_backend(request):
+    """Proxy requests to the Matter.js backend."""
+    # Forward the request to Matter backend
+    path = request.path.replace('/api/matter', '')
+    url = f"{MATTER_BACKEND_URL}/api/matter{path}"
+    
     try:
-        with open(config_file, 'w') as f:
-            json.dump(matter_bridges, f, indent=2)
-    except Exception as e:
-        print(f"❌ Error saving Matter config: {e}")
+        async with aiohttp.ClientSession() as session:
+            # Forward method, headers, and body
+            method = request.method
+            headers = {k: v for k, v in request.headers.items() if k.lower() not in ['host', 'content-length']}
+            
+            data = None
+            if method in ['POST', 'PUT', 'PATCH']:
+                data = await request.read()
+            
+            async with session.request(method, url, headers=headers, data=data) as resp:
+                body = await resp.read()
+                return web.Response(
+                    body=body,
+                    status=resp.status,
+                    headers={'Content-Type': resp.content_type}
+                )
+    except aiohttp.ClientError as e:
+        print(f"❌ Matter backend proxy error: {e}")
+        return web.json_response({'error': 'Matter backend unavailable'}, status=503)
+
 
 
 async def register_with_server():
@@ -327,95 +349,7 @@ async def serve_dashboard():
     
     print(f"📊 Starting unified Oasira server on port {dashboard_port}...")
     
-    # Load Matter configuration
-    load_matter_config()
-    
     app = web.Application()
-    
-    # Matter API endpoints
-    async def matter_api_root(request):
-        """Root Matter API endpoint."""
-        return web.json_response({})
-    
-    async def matter_api_bridges_list(request):
-        """List all Matter bridges."""
-        bridges_list = list(matter_bridges.values())
-        return web.json_response(bridges_list)
-    
-    async def matter_api_bridges_create(request):
-        """Create a new Matter bridge."""
-        try:
-            data = await request.json()
-            bridge_id = data.get('id', str(uuid.uuid4()))
-            bridge = {
-                'id': bridge_id,
-                'name': data.get('name', 'Matter Bridge'),
-                'port': data.get('port', 5540),
-                'filter': data.get('filter', {}),
-                'enabled': data.get('enabled', True),
-                'created': data.get('created', asyncio.get_event_loop().time())
-            }
-            matter_bridges[bridge_id] = bridge
-            save_matter_config()
-            return web.json_response(bridge)
-        except Exception as e:
-            return web.json_response({'error': str(e)}, status=400)
-    
-    async def matter_api_bridges_get(request):
-        """Get a specific Matter bridge."""
-        bridge_id = request.match_info['bridgeId']
-        if bridge_id in matter_bridges:
-            return web.json_response(matter_bridges[bridge_id])
-        return web.Response(text="Not Found", status=404)
-    
-    async def matter_api_bridges_update(request):
-        """Update a Matter bridge."""
-        bridge_id = request.match_info['bridgeId']
-        if bridge_id not in matter_bridges:
-            return web.Response(text="Not Found", status=404)
-        try:
-            data = await request.json()
-            if data.get('id') != bridge_id:
-                return web.Response(text="Bridge ID mismatch", status=400)
-            matter_bridges[bridge_id].update(data)
-            save_matter_config()
-            return web.json_response(matter_bridges[bridge_id])
-        except Exception as e:
-            return web.json_response({'error': str(e)}, status=400)
-    
-    async def matter_api_bridges_delete(request):
-        """Delete a Matter bridge."""
-        bridge_id = request.match_info['bridgeId']
-        if bridge_id in matter_bridges:
-            del matter_bridges[bridge_id]
-            save_matter_config()
-        return web.Response(status=204)
-    
-    async def matter_api_bridges_reset(request):
-        """Factory reset a Matter bridge."""
-        bridge_id = request.match_info['bridgeId']
-        if bridge_id not in matter_bridges:
-            return web.Response(text="Not Found", status=404)
-        # Reset bridge to defaults
-        bridge = matter_bridges[bridge_id]
-        bridge['filter'] = {}
-        bridge['enabled'] = True
-        save_matter_config()
-        return web.json_response(bridge)
-    
-    async def matter_api_bridges_devices(request):
-        """Get devices for a Matter bridge."""
-        bridge_id = request.match_info['bridgeId']
-        if bridge_id not in matter_bridges:
-            return web.Response(text="Not Found", status=404)
-        
-        # Query Home Assistant for devices
-        # This would integrate with HA's Matter integration
-        devices = {
-            'endpoints': [],
-            'bridgeInfo': matter_bridges[bridge_id]
-        }
-        return web.json_response(devices)
     
     # Main dashboard handler
     async def index_handler(request):
@@ -431,17 +365,11 @@ async def serve_dashboard():
             return web.Response(text="Dashboard not available", status=404)
     
     # Register routes - order matters!
-    # Matter API routes (Python-based backend)
-    app.router.add_get('/api/matter', matter_api_root)
-    app.router.add_get('/api/matter/bridges', matter_api_bridges_list)
-    app.router.add_post('/api/matter/bridges', matter_api_bridges_create)
-    app.router.add_get('/api/matter/bridges/{bridgeId}', matter_api_bridges_get)
-    app.router.add_put('/api/matter/bridges/{bridgeId}', matter_api_bridges_update)
-    app.router.add_delete('/api/matter/bridges/{bridgeId}', matter_api_bridges_delete)
-    app.router.add_get('/api/matter/bridges/{bridgeId}/actions/factory-reset', matter_api_bridges_reset)
-    app.router.add_get('/api/matter/bridges/{bridgeId}/devices', matter_api_bridges_devices)
+    # Matter API routes - proxy to Matter.js backend
+    app.router.add_route('*', '/api/matter', proxy_to_matter_backend)
+    app.router.add_route('*', '/api/matter/{path:.*}', proxy_to_matter_backend)
     
-    print("✅ Matter API integrated at /api/matter/")
+    print("✅ Matter API proxy configured at /api/matter/")
     
     # Main dashboard routes
     app.router.add_get('/', index_handler)
@@ -455,12 +383,61 @@ async def serve_dashboard():
     
     print(f"✅ Unified server running at http://0.0.0.0:{dashboard_port}")
     print(f"   - Main Dashboard: http://0.0.0.0:{dashboard_port}/")
-    print(f"   - Matter API: http://0.0.0.0:{dashboard_port}/api/matter/")
+    print(f"   - Matter API (proxied): http://0.0.0.0:{dashboard_port}/api/matter/")
     
     # Keep running
     while True:
         await asyncio.sleep(3600)
 
+
+async def start_matter_backend():
+    """Start the Matter.js backend server."""
+    matter_backend_path = Path("/app/matter-backend")
+    
+    if not matter_backend_path.exists():
+        print("⚠️ Matter backend not found, skipping...")
+        return
+    
+    print("🔷 Starting Matter.js backend server...")
+    
+    # Set environment variables for Matter backend
+    env = os.environ.copy()
+    env["STORAGE_PATH"] = "/data/matter"
+    env["HA_URL"] = ha_url
+    env["HA_TOKEN"] = ha_token or ""
+    
+    try:
+        # Start Matter backend as subprocess
+        process = await asyncio.create_subprocess_exec(
+            "node",
+            "/app/matter-backend/bundle.js",
+            "start",
+            "--storage", "/data/matter",
+            "--http-port", "8482",
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        
+        print(f"✅ Matter backend started (PID: {process.pid})")
+        
+        # Monitor output
+        async def read_output(stream, prefix):
+            while True:
+                line = await stream.readline()
+                if not line:
+                    break
+                print(f"{prefix}: {line.decode().strip()}")
+        
+        asyncio.create_task(read_output(process.stdout, "Matter"))
+        asyncio.create_task(read_output(process.stderr, "Matter-ERR"))
+        
+        # Monitor process
+        await process.wait()
+        print(f"⚠️ Matter backend exited with code {process.returncode}")
+        
+    except Exception as e:
+        print(f"❌ Failed to start Matter backend: {e}")
 
 async def main():
     success = await start()
@@ -473,6 +450,11 @@ async def main():
     print("\n🌩️ Starting Cloudflare tunnel...")
     asyncio.create_task(start_cloudflared())
     await asyncio.sleep(2)  # Give cloudflared a moment to start
+    
+    # Start Matter backend
+    print("\n🔷 Starting Matter Backend...")
+    asyncio.create_task(start_matter_backend())
+    await asyncio.sleep(2)  # Give Matter backend a moment to start
     
     # Start unified dashboard server with integrated Matter UI
     print("\n📊 Starting Unified Dashboard...")
