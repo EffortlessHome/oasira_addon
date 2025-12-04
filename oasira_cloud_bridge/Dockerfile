@@ -44,8 +44,15 @@ RUN python3 -m venv /venv \
 # Copy dashboard dist folder (includes .gitkeep if empty)
 COPY dist /app/dist
 
-# Copy built Matter backend from builder stage (bundle.js is self-contained)
-COPY --from=matter-builder /build/packages/backend/bundle.js /app/matter-backend/bundle.js
+# Copy built Matter backend from builder stage - copy entire structure
+COPY --from=matter-builder /build/packages /app/packages
+COPY --from=matter-builder /build/node_modules /app/node_modules
+COPY --from=matter-builder /build/package.json /app/package.json
+
+# Create Matter data directory
+RUN mkdir -p /data/matter
+
+WORKDIR /app
 
 ENV PATH="/venv/bin:$PATH"
 
