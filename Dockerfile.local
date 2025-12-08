@@ -28,6 +28,9 @@ FROM python:3.12-alpine
 # Install Node.js for Matter backend
 RUN apk add --no-cache nodejs npm
 
+# Force layer rebuild for Python files
+RUN echo "Build timestamp: $(date)" > /tmp/build_timestamp
+
 # Copy Python files
 COPY oasira_cloud_bridge/run.py /app/run.py
 COPY oasira_cloud_bridge/requirements.txt /app/requirements.txt

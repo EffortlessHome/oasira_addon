@@ -11,6 +11,9 @@
 		},
 		{
 			"path": "../oasira-dashboard"
+		},
+		{
+			"path": "../my-oasira"
 		}
 	],
 	"settings": {}

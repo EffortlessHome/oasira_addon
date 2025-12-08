@@ -246,6 +246,17 @@ MATTER_BACKEND_URL = "http://localhost:8482"  # Matter backend port
 
 async def proxy_to_matter_backend(request):
     """Proxy requests to the Matter.js backend."""
+    # Handle CORS preflight requests
+    if request.method == 'OPTIONS':
+        return web.Response(
+            status=200,
+            headers={
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Authorization',
+            }
+        )
+    
     # Forward the request to Matter backend
     path = request.path.replace('/api/matter', '')
     url = f"{MATTER_BACKEND_URL}/api/matter{path}"
@@ -262,14 +273,29 @@ async def proxy_to_matter_backend(request):
             
             async with session.request(method, url, headers=headers, data=data) as resp:
                 body = await resp.read()
+                # Add CORS headers to response
+                response_headers = {
+                    'Content-Type': resp.content_type,
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Authorization',
+                }
                 return web.Response(
                     body=body,
                     status=resp.status,
-                    headers={'Content-Type': resp.content_type}
+                    headers=response_headers
                 )
     except aiohttp.ClientError as e:
         print(f"❌ Matter backend proxy error: {e}")
-        return web.json_response({'error': 'Matter backend unavailable'}, status=503)
+        return web.json_response(
+            {'error': 'Matter backend unavailable'},
+            status=503,
+            headers={
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Authorization',
+            }
+        )
 
 
 

@@ -40,6 +40,22 @@ export class WebApi extends Service {
 
   protected override async initialize() {
     const api = express.Router();
+    
+    // Add CORS middleware
+    api.use((req, res, next) => {
+      res.header('Access-Control-Allow-Origin', '*');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+      
+      // Handle preflight requests
+      if (req.method === 'OPTIONS') {
+        res.sendStatus(200);
+        return;
+      }
+      
+      next();
+    });
+    
     api
       .use(express.json())
       .use(nocache())
