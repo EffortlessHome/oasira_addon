@@ -31,6 +31,7 @@ testmode = None
 plan = None
 trial_expiration = None
 id_token = None
+refresh_token = None  # Store refresh token for token refresh
 
 CLIENT_ID = str(uuid.uuid4())  # Unique ID for this HA instance
 
@@ -39,7 +40,7 @@ CLIENT_ID = str(uuid.uuid4())  # Unique ID for this HA instance
 async def start():
     """Authenticate with Firebase OAuth and fetch system configuration."""
     global cloudflare_token, ha_token, ha_url, fullname, emailaddress
-    global customer_id, system_id, systemid, testmode, plan, trial_expiration, id_token
+    global customer_id, system_id, systemid, testmode, plan, trial_expiration, id_token, refresh_token
 
     print("Starting OAuth authentication...")
 
@@ -55,6 +56,7 @@ async def start():
             
             firebase_uid = auth_result.get("localId")
             id_token = auth_result.get("idToken")
+            refresh_token = auth_result.get("refreshToken")  # Store refresh token
             
             if not firebase_uid or not id_token:
                 print("❌ Firebase authentication failed - missing tokens")
@@ -154,70 +156,111 @@ async def start():
 
 
 async def start_cloudflared():
-    """Download, install, and run cloudflared binary."""
-    # Install part
-    url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
-    path = "/usr/local/bin/cloudflared"
-
+    """Download, install, and run cloudflared binary with error handling."""
     try:
-        if not os.path.exists(path):
-            print("cloudflared not found, downloading...")
-            proc = await asyncio.create_subprocess_exec(
-                "wget", "-O", path, url,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await proc.communicate()
-            if proc.returncode != 0:
-                print(f"wget failed: {stderr.decode()}")
-                return
+        # Install part
+        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
+        path = "/usr/local/bin/cloudflared"
 
-            # Make executable
-            proc_chmod = await asyncio.create_subprocess_exec(
-                "chmod", "+x", path
-            )
-            await proc_chmod.communicate()
-            print(f"cloudflared installed at {path}")
-        else:
-            print("cloudflared already installed.")
+        try:
+            if not os.path.exists(path):
+                print("cloudflared not found, downloading...")
+                proc = await asyncio.create_subprocess_exec(
+                    "wget", "-O", path, url,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await proc.communicate()
+                if proc.returncode != 0:
+                    print(f"wget failed: {stderr.decode()}")
+                    return
 
-    except Exception as e:
-        print(f"Error installing cloudflared: {e}")
-        return
+                # Make executable
+                proc_chmod = await asyncio.create_subprocess_exec(
+                    "chmod", "+x", path
+                )
+                await proc_chmod.communicate()
+                print(f"cloudflared installed at {path}")
+            else:
+                print("cloudflared already installed.")
 
-    # Run part
-    if not cloudflare_token:
-        print("CLOUDFLARE_TOKEN variable not set. Cannot start tunnel.")
-        return
+        except Exception as e:
+            print(f"Error installing cloudflared: {e}")
+            return
 
-    print("Starting cloudflared tunnel...")
-    try:
-        # Run cloudflared as a background process
-        proc = await asyncio.create_subprocess_exec(
-            path,
-            "tunnel",
-            "run",
-            "--token",
-            cloudflare_token,            
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        # Run part
+        if not cloudflare_token:
+            print("CLOUDFLARE_TOKEN variable not set. Cannot start tunnel.")
+            return
 
-        async def log_output(stream, prefix):
-            while True:
-                line = await stream.readline()
-                if not line:
+        print("Starting cloudflared tunnel...")
+        retry_count = 0
+        max_retries = 3
+        
+        while retry_count < max_retries:
+            try:
+                # Run cloudflared as a background process
+                proc = await asyncio.create_subprocess_exec(
+                    path,
+                    "tunnel",
+                    "run",
+                    "--token",
+                    cloudflare_token,            
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+
+                async def log_output(stream, prefix):
+                    try:
+                        while True:
+                            line = await stream.readline()
+                            if not line:
+                                break
+                            decoded = line.decode().strip()
+                            if decoded:
+                                print(f"{prefix}: {decoded}")
+                    except asyncio.CancelledError:
+                        pass
+                    except Exception as e:
+                        print(f"⚠️ Error reading {prefix}: {e}")
+
+                asyncio.create_task(log_output(proc.stdout, "cloudflared-out"))
+                asyncio.create_task(log_output(proc.stderr, "cloudflared-err"))
+
+                print("✅ cloudflared tunnel process started.")
+                
+                # Wait for process and restart if it exits
+                await proc.wait()
+                print(f"⚠️ cloudflared exited with code {proc.returncode}")
+                
+                retry_count += 1
+                if retry_count < max_retries:
+                    print(f"🔄 Restarting cloudflared (attempt {retry_count + 1}/{max_retries})...")
+                    await asyncio.sleep(5)
+                else:
+                    print("❌ cloudflared failed too many times, stopping restart attempts")
                     break
-                print(f"{prefix}: {line.decode().strip()}")
 
-        asyncio.create_task(log_output(proc.stdout, "cloudflared-out"))
-        asyncio.create_task(log_output(proc.stderr, "cloudflared-err"))
-
-        print("cloudflared tunnel process started.")
-
-    except FileNotFoundError:
-        print("cloudflared binary not found. Installation might have failed.")
-    except Exception as exc:
+            except FileNotFoundError:
+                print("❌ cloudflared binary not found. Installation might have failed.")
+                break
+            except Exception as exc:
+                print(f"❌ cloudflared error: {exc}")
+                import traceback
+                traceback.print_exc()
+                retry_count += 1
+                if retry_count < max_retries:
+                    await asyncio.sleep(5)
+                else:
+                    break
+    
+    except asyncio.CancelledError:
+        print("⚠️ Cloudflared task cancelled")
+        raise
+    except Exception as e:
+        print(f"❌ Fatal cloudflared error: {e}")
+        import traceback
+        traceback.print_exc()
         print(f"Error running cloudflared: {exc}")
 
 
@@ -359,68 +402,104 @@ async def connect_to_cloud():
 
 async def serve_dashboard():
     """Serve the Oasira dashboard with integrated Matter Hub API."""
-    dashboard_path = Path("/app/dist")
+    try:
+        dashboard_path = Path("/app/dist")
+        
+        if not dashboard_path.exists():
+            print(f"⚠️ Dashboard files not found at {dashboard_path}")
+            print("   Dashboard will not be available")
+            return
+        
+        print(f"📊 Starting unified Oasira server on port {dashboard_port}...")
+        
+        app = web.Application()
+        
+        # Main dashboard handler
+        async def index_handler(request):
+            try:
+                index_file = dashboard_path / 'index.html'
+                if index_file.exists():
+                    response = web.FileResponse(index_file)
+                    # Disable caching for index.html to ensure fresh loads
+                    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+                    response.headers['Pragma'] = 'no-cache'
+                    response.headers['Expires'] = '0'
+                    return response
+                else:
+                    return web.Response(text="Dashboard not available", status=404)
+            except Exception as e:
+                print(f"❌ Error serving index: {e}")
+                return web.Response(text="Internal server error", status=500)
+        
+        # Static file handler
+        async def static_handler(request):
+            try:
+                filename = request.match_info['filename']
+                filepath = dashboard_path / filename
+                
+                # Log request for debugging
+                print(f"📄 [Dashboard] Request: {request.method} /{filename}")
+                
+                if filepath.exists() and filepath.is_file():
+                    response = web.FileResponse(filepath)
+                    # Explicitly set MIME types for JavaScript files (critical for service workers)
+                    if filename.endswith('.js'):
+                        response.headers['Content-Type'] = 'application/javascript'
+                        print(f"✅ [Dashboard] Serving JS file: {filename} (Content-Type: application/javascript)")
+                    elif filename.endswith('.mjs'):
+                        response.headers['Content-Type'] = 'application/javascript'
+                        print(f"✅ [Dashboard] Serving MJS file: {filename} (Content-Type: application/javascript)")
+                    return response
+                # If file not found, serve index.html for SPA routing
+                print(f"⚠️ [Dashboard] File not found: {filename}, serving index.html")
+                return await index_handler(request)
+            except Exception as e:
+                print(f"❌ Error serving static file: {e}")
+                return web.Response(text="Internal server error", status=500)
+        
+        # Register routes - API routes first!
+        # Matter API routes - these are checked FIRST
+        app.router.add_route('*', '/api/matter', proxy_to_matter_backend)
+        app.router.add_route('*', '/api/matter/{path:.*}', proxy_to_matter_backend)
+        
+        print("✅ Matter API proxy configured at /api/matter/")
+        
+        # Dashboard routes - these come AFTER API routes
+        app.router.add_get('/', index_handler)
+        app.router.add_static('/assets', path=dashboard_path / 'assets', name='assets', show_index=False)
+        # Serve other static files and handle SPA routing (but API routes already matched above)
+        app.router.add_get('/{filename:.+}', static_handler)
+        
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', dashboard_port)
+        await site.start()
+        
+        print(f"✅ Unified server running at http://0.0.0.0:{dashboard_port}")
+        print(f"   - Main Dashboard: http://0.0.0.0:{dashboard_port}/")
+        print(f"   - Matter API (proxied): http://0.0.0.0:{dashboard_port}/api/matter/")
+        
+        # Keep running
+        while True:
+            await asyncio.sleep(3600)
     
-    if not dashboard_path.exists():
-        print(f"⚠️ Dashboard files not found at {dashboard_path}")
-        print("   Dashboard will not be available")
-        return
-    
-    print(f"📊 Starting unified Oasira server on port {dashboard_port}...")
-    
-    app = web.Application()
-    
-    # Main dashboard handler
-    async def index_handler(request):
-        index_file = dashboard_path / 'index.html'
-        if index_file.exists():
-            response = web.FileResponse(index_file)
-            # Disable caching for index.html to ensure fresh loads
-            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-            response.headers['Pragma'] = 'no-cache'
-            response.headers['Expires'] = '0'
-            return response
-        else:
-            return web.Response(text="Dashboard not available", status=404)
-    
-    # Static file handler
-    async def static_handler(request):
-        filename = request.match_info['filename']
-        filepath = dashboard_path / filename
-        if filepath.exists() and filepath.is_file():
-            return web.FileResponse(filepath)
-        # If file not found, serve index.html for SPA routing
-        return await index_handler(request)
-    
-    # Register routes - API routes first!
-    # Matter API routes - these are checked FIRST
-    app.router.add_route('*', '/api/matter', proxy_to_matter_backend)
-    app.router.add_route('*', '/api/matter/{path:.*}', proxy_to_matter_backend)
-    
-    print("✅ Matter API proxy configured at /api/matter/")
-    
-    # Dashboard routes - these come AFTER API routes
-    app.router.add_get('/', index_handler)
-    app.router.add_static('/assets', path=dashboard_path / 'assets', name='assets', show_index=False)
-    # Serve other static files and handle SPA routing (but API routes already matched above)
-    app.router.add_get('/{filename:.+}', static_handler)
-    
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', dashboard_port)
-    await site.start()
-    
-    print(f"✅ Unified server running at http://0.0.0.0:{dashboard_port}")
-    print(f"   - Main Dashboard: http://0.0.0.0:{dashboard_port}/")
-    print(f"   - Matter API (proxied): http://0.0.0.0:{dashboard_port}/api/matter/")
-    
-    # Keep running
-    while True:
-        await asyncio.sleep(3600)
+    except asyncio.CancelledError:
+        print("⚠️ Dashboard server cancelled")
+        raise
+    except Exception as e:
+        print(f"❌ Failed to start dashboard server: {e}")
+        import traceback
+        traceback.print_exc()
 
+
+# Global Matter backend process reference
+matter_backend_process = None
+matter_backend_healthy = False
 
 async def start_matter_backend():
-    """Start the Matter.js backend server."""
+    """Start the Matter.js backend server with automatic restart on failure."""
+    global matter_backend_process, matter_backend_healthy
+    
     cli_path = Path("/app/packages/backend/dist/cli.js")
     
     print(f"🔍 Checking Matter backend at {cli_path}")
@@ -430,56 +509,156 @@ async def start_matter_backend():
         print("⚠️ Matter backend cli.js not found, skipping...")
         return
     
-    print("🔷 Starting Matter.js backend server...")
+    retry_count = 0
+    max_retries = 5
+    retry_delay = 10
     
-    # Set environment variables for Matter backend
-    env = os.environ.copy()
-    env["STORAGE_PATH"] = "/data/matter"
-    env["HA_URL"] = ha_url
-    env["HA_TOKEN"] = ha_token or ""
-    env["NODE_PATH"] = "/app/node_modules"
-    
-    print(f"   - HA_URL: {ha_url}")
-    print(f"   - Storage: /data/matter")
-    print(f"   - HTTP Port: 8482")
-    
-    try:
-        # Start Matter backend as subprocess
-        process = await asyncio.create_subprocess_exec(
-            "node",
-            str(cli_path),
-            "start",
-            "--storage-location", "/data/matter",
-            "--http-port", "8482",
-            "--home-assistant-url", ha_url,
-            "--home-assistant-access-token", ha_token or "",
-            env=env,
-            cwd="/app",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        
-        print(f"✅ Matter backend started (PID: {process.pid})")
-        
-        # Monitor output
-        async def read_output(stream, prefix):
-            while True:
-                line = await stream.readline()
-                if not line:
-                    break
-                print(f"{prefix}: {line.decode().strip()}")
-        
-        asyncio.create_task(read_output(process.stdout, "Matter"))
-        asyncio.create_task(read_output(process.stderr, "Matter-ERR"))
-        
-        # Monitor process
-        await process.wait()
-        print(f"⚠️ Matter backend exited with code {process.returncode}")
-        
-    except Exception as e:
-        print(f"❌ Failed to start Matter backend: {e}")
+    while True:
+        try:
+            print("🔷 Starting Matter.js backend server...")
+            matter_backend_healthy = False
+            
+            # Set environment variables for Matter backend
+            env = os.environ.copy()
+            env["STORAGE_PATH"] = "/data/matter"
+            env["HA_URL"] = ha_url or ""
+            env["HA_TOKEN"] = ha_token or ""
+            env["NODE_PATH"] = "/app/node_modules"
+            
+            print(f"   - HA_URL: {ha_url}")
+            print(f"   - Storage: /data/matter")
+            print(f"   - HTTP Port: 8482")
+            
+            # Start Matter backend as subprocess
+            matter_backend_process = await asyncio.create_subprocess_exec(
+                "node",
+                str(cli_path),
+                "start",
+                "--storage-location", "/data/matter",
+                "--http-port", "8482",
+                "--home-assistant-url", ha_url or "",
+                "--home-assistant-access-token", ha_token or "",
+                env=env,
+                cwd="/app",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            print(f"✅ Matter backend started (PID: {matter_backend_process.pid})")
+            retry_count = 0  # Reset retry count on successful start
+            
+            # Monitor output with error handling
+            async def read_output(stream, prefix):
+                try:
+                    while True:
+                        line = await stream.readline()
+                        if not line:
+                            break
+                        decoded = line.decode().strip()
+                        if decoded:
+                            print(f"{prefix}: {decoded}")
+                except asyncio.CancelledError:
+                    pass
+                except Exception as e:
+                    print(f"⚠️ Error reading {prefix} output: {e}")
+            
+            # Create monitored tasks
+            stdout_task = asyncio.create_task(read_output(matter_backend_process.stdout, "Matter"))
+            stderr_task = asyncio.create_task(read_output(matter_backend_process.stderr, "Matter-ERR"))
+            
+            # Wait a moment then mark as healthy
+            await asyncio.sleep(5)
+            matter_backend_healthy = True
+            print("✅ Matter backend marked as healthy")
+            
+            # Monitor process
+            returncode = await matter_backend_process.wait()
+            matter_backend_healthy = False
+            
+            # Cancel output tasks
+            stdout_task.cancel()
+            stderr_task.cancel()
+            
+            print(f"⚠️ Matter backend exited with code {returncode}")
+            
+            # If process exits cleanly, wait before restart
+            retry_count += 1
+            if retry_count >= max_retries:
+                print(f"❌ Matter backend failed {max_retries} times, stopping restart attempts")
+                break
+            
+            print(f"🔄 Restarting Matter backend in {retry_delay} seconds (attempt {retry_count}/{max_retries})...")
+            await asyncio.sleep(retry_delay)
+            
+        except asyncio.CancelledError:
+            print("⚠️ Matter backend task cancelled")
+            matter_backend_healthy = False
+            break
+        except Exception as e:
+            matter_backend_healthy = False
+            print(f"❌ Failed to start Matter backend: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            retry_count += 1
+            if retry_count >= max_retries:
+                print(f"❌ Matter backend failed {max_retries} times, stopping restart attempts")
+                break
+            
+            print(f"🔄 Retrying in {retry_delay} seconds (attempt {retry_count}/{max_retries})...")
+            await asyncio.sleep(retry_delay)
         import traceback
         traceback.print_exc()
+
+async def check_matter_backend_health():
+    """Check if Matter backend is responding."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("http://localhost:8482/api/matter/bridges", timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                return resp.status == 200
+    except Exception:
+        return False
+
+async def health_check_loop():
+    """Periodically check Matter backend health and restart if needed."""
+    global matter_backend_process, matter_backend_healthy
+    
+    # Wait for initial startup
+    await asyncio.sleep(30)
+    
+    while True:
+        try:
+            await asyncio.sleep(60)  # Check every 60 seconds
+            
+            if not matter_backend_healthy:
+                print("⚠️ Matter backend not marked as healthy, skipping health check")
+                continue
+            
+            is_healthy = await check_matter_backend_health()
+            
+            if not is_healthy:
+                print("❌ Matter backend health check failed")
+                
+                # Try to restart the backend
+                if matter_backend_process and matter_backend_process.returncode is None:
+                    print("🔄 Terminating unresponsive Matter backend...")
+                    try:
+                        matter_backend_process.terminate()
+                        await asyncio.sleep(5)
+                        if matter_backend_process.returncode is None:
+                            matter_backend_process.kill()
+                    except Exception as e:
+                        print(f"⚠️ Error terminating process: {e}")
+                
+                matter_backend_healthy = False
+                print("✅ Matter backend will be restarted automatically")
+            else:
+                print("✅ Matter backend health check passed")
+                
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"⚠️ Health check error: {e}")
 
 async def ensure_default_bridge():
     """Create a default Matter bridge if none exists."""
@@ -492,15 +671,15 @@ async def ensure_default_bridge():
         print("⏳ Waiting for Matter backend to be ready...")
         for attempt in range(max_retries):
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get("http://localhost:8482/api/matter/bridges", timeout=aiohttp.ClientTimeout(total=5)) as resp:
-                        if resp.status == 200:
-                            backend_ready = True
-                            print(f"✅ Matter backend is ready (attempt {attempt + 1})")
-                            break
+                if await check_matter_backend_health():
+                    backend_ready = True
+                    print(f"✅ Matter backend is ready (attempt {attempt + 1})")
+                    break
             except Exception:
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(retry_delay)
+                pass
+            
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
                     
         if not backend_ready:
             print("⚠️ Matter backend did not become ready in time")
@@ -541,37 +720,115 @@ async def ensure_default_bridge():
                     print(f"⚠️ Could not check bridges: HTTP {resp.status}")
     except Exception as e:
         print(f"⚠️ Could not create default bridge: {e}")
+        import traceback
+        traceback.print_exc()
+
+async def task_wrapper(coro, name):
+    """Wrapper to handle exceptions in background tasks."""
+    try:
+        await coro
+    except asyncio.CancelledError:
+        print(f"⚠️ Task '{name}' was cancelled")
+    except Exception as e:
+        print(f"❌ Unhandled error in task '{name}': {e}")
+        import traceback
+        traceback.print_exc()
+
+async def refresh_firebase_token_loop():
+    """Periodically refresh the Firebase ID token."""
+    global id_token, refresh_token
+    
+    if not refresh_token:
+        print("⚠️ No refresh token available - cannot refresh Firebase token")
+        return
+    
+    # Wait 50 minutes before first refresh (tokens expire in 60 minutes)
+    await asyncio.sleep(50 * 60)
+    
+    while True:
+        try:
+            print("🔄 Refreshing Firebase ID token...")
+            
+            async with OasiraAPIClient() as client:
+                result = await client.firebase_refresh_token(refresh_token)
+                
+                new_id_token = result.get("idToken")
+                new_refresh_token = result.get("refreshToken")
+                
+                if new_id_token:
+                    id_token = new_id_token
+                    
+                    if new_refresh_token:
+                        refresh_token = new_refresh_token
+                    
+                    print("✅ Firebase ID token refreshed successfully")
+                else:
+                    print("❌ Failed to refresh Firebase token - no idToken in response")
+                    
+        except OasiraAPIError as e:
+            print(f"❌ Failed to refresh Firebase token: {e}")
+            # Continue trying even if refresh fails
+        except Exception as e:
+            print(f"❌ Unexpected error refreshing Firebase token: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # Wait another 50 minutes before next refresh
+        await asyncio.sleep(50 * 60)
 
 async def main():
-    success = await start()
-    
-    if not success:
-        print("❌ Start failed. Exiting...")
-        return
+    """Main entry point with comprehensive error handling."""
+    try:
+        success = await start()
+        
+        if not success:
+            print("❌ Start failed. Exiting...")
+            return
 
-    # Start cloudflared tunnel
-    print("\n🌩️ Starting Cloudflare tunnel...")
-    asyncio.create_task(start_cloudflared())
-    await asyncio.sleep(2)  # Give cloudflared a moment to start
-    
-    # Start Matter backend
-    print("\n🔷 Starting Matter Backend...")
-    asyncio.create_task(start_matter_backend())
-    await asyncio.sleep(2)  # Give Matter backend a moment to start
-    
-    # Ensure default bridge exists
-    asyncio.create_task(ensure_default_bridge())
-    
-    # Start unified dashboard server with integrated Matter UI
-    print("\n📊 Starting Unified Dashboard...")
-    asyncio.create_task(serve_dashboard())
-    
-    # Keep the main coroutine running
-    await asyncio.Event().wait()
+        # Start Firebase token refresh loop
+        print("\n🔄 Starting Firebase Token Refresh Monitor...")
+        asyncio.create_task(task_wrapper(refresh_firebase_token_loop(), "Firebase Token Refresh"))
 
-    #await register_with_server()
-    #await connect_to_cloud()
+        # Start cloudflared tunnel with error handling
+        print("\n🌩️ Starting Cloudflare tunnel...")
+        asyncio.create_task(task_wrapper(start_cloudflared(), "Cloudflare Tunnel"))
+        await asyncio.sleep(2)  # Give cloudflared a moment to start
+        
+        # Start Matter backend with error handling
+        print("\n🔷 Starting Matter Backend...")
+        asyncio.create_task(task_wrapper(start_matter_backend(), "Matter Backend"))
+        await asyncio.sleep(5)  # Give Matter backend a moment to start
+        
+        # Start health check loop
+        print("\n❤️ Starting Health Check Monitor...")
+        asyncio.create_task(task_wrapper(health_check_loop(), "Health Check"))
+        
+        # Ensure default bridge exists
+        print("\n🌉 Checking Default Bridge...")
+        asyncio.create_task(task_wrapper(ensure_default_bridge(), "Default Bridge"))
+        
+        # Start unified dashboard server with integrated Matter UI
+        print("\n📊 Starting Unified Dashboard...")
+        asyncio.create_task(task_wrapper(serve_dashboard(), "Dashboard Server"))
+        
+        # Keep the main coroutine running
+        print("\n✅ All services started. Running...")
+        await asyncio.Event().wait()
+        
+    except KeyboardInterrupt:
+        print("\n⚠️ Received shutdown signal")
+    except Exception as e:
+        print(f"\n❌ Fatal error in main: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n👋 Shutting down gracefully...")
+    except Exception as e:
+        print(f"\n❌ Fatal error: {e}")
+        import traceback
+        traceback.print_exc()
 
