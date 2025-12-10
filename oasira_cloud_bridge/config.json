@@ -4,6 +4,7 @@
   "slug": "oasira_cloud_bridge",
   "description": "Oasira Cloud Bridge for Home Assistant.",
   "arch": ["aarch64", "amd64", "armv7", "i386"],
+  "image": "effortlesshome/oasira-cloud-bridge:{version}-{arch}",
   "startup": "services",
   "boot": "auto",
   "map": ["config:rw"],
