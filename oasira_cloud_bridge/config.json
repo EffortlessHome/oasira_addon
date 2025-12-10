@@ -1,10 +1,11 @@
 {
   "name": "Oasira Cloud Bridge",
   "version": "1.1.34",
-  "slug": "oasira_cloud_bridge",
+  "slug": "oasira_bridge",
   "description": "Oasira Cloud Bridge for Home Assistant.",
   "arch": ["aarch64", "amd64", "armv7", "i386"],
-  "image": "effortlesshome/effortlesshome/oasira_addon-oasira-bridge:latest",
+  "_comment": "Uncomment 'image' below when images are published to Docker Hub",
+  "_image": "effortlesshome/oasira-cloud-bridge:{version}-{arch}",
   "startup": "services",
   "boot": "auto",
   "map": ["config:rw"],
@@ -16,9 +17,7 @@
     "dashboard_port": 8080,
     "send_on_start": true,
     "interval_seconds": 3600,
-    "show_token_in_logs": false,
-    "extra_payload": {},
-    "origin_cert_path": "/cert.pem"
+    "show_token_in_logs": false
   },
   "schema": {
     "email": "str",
@@ -28,8 +27,7 @@
     "dashboard_port": "int",
     "send_on_start": "bool",
     "interval_seconds": "int",
-    "show_token_in_logs": "bool",
-    "extra_payload": "any"
+    "show_token_in_logs": "bool"
   },
   "ports": {},
   "host_network": true,
@@ -38,9 +36,9 @@
   "hassio_api": true,
   "homeassistant_api": true,
   "host_paths": [],
-  "auto_uart": false,
   "startup_conditions": [],
-  "ingress": false,
-  "panel_iframe": null,
-  "ingress_panel": false
+  "ingress": true,
+  "ingress_port": 8080,
+  "panel_icon": "mdi:view-dashboard",
+  "panel_title": "Oasira Dashboard"
 }

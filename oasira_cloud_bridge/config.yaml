@@ -18,7 +18,8 @@ panel_title: Oasira Dashboard
 arch:
   - amd64
   - aarch64
-image: "effortlesshome/oasira-cloud-bridge:{version}-{arch}"
+# Uncomment when images are published to Docker Hub:
+# image: "effortlesshome/oasira-cloud-bridge:{version}-{arch}"
 options:
   email: ""
   password: ""

@@ -12,6 +12,9 @@ __pycache__/
 # Note: dist folder is committed so Home Assistant can build from GitHub
 # Run build.bat/build.sh to update with latest dashboard
 
+
+data/
+
 # IDE
 .vscode/
 .idea/
