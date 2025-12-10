@@ -1,6 +1,6 @@
 # Oasira Home Assistant Add-ons
 
-Home Assistant add-ons repository for Oasira Cloud services.
+Home Assistant add-ons repository for Oasira.
 
 ## 🚀 Quick Start
 

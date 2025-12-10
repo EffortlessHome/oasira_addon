@@ -6,7 +6,7 @@ setlocal enabledelayedexpansion
 
 REM Configuration
 if "%DOCKER_USERNAME%"=="" set DOCKER_USERNAME=effortlesshome
-set IMAGE_NAME=%DOCKER_USERNAME%/oasira-cloud-bridge
+set IMAGE_NAME=%DOCKER_USERNAME%/oasiracloudbridge
 
 REM Extract version from config.yaml
 for /f "tokens=2 delims=:" %%a in ('findstr "^version:" oasira_cloud_bridge\config.yaml') do (

@@ -18,10 +18,7 @@ panel_title: Oasira Dashboard
 arch:
   - amd64
   - aarch64
-# Use pre-built images from Docker Hub
-image:
-  amd64: "effortlesshome/oasira-cloud-bridge:1.1.35-amd64"
-  aarch64: "effortlesshome/oasira-cloud-bridge:1.1.35-aarch64"
+image: "effortlesshome/oasiracloudbridge:latest"
 options:
   email: ""
   password: ""
