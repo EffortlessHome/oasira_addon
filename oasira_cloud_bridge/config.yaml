@@ -19,7 +19,7 @@ arch:
   - amd64
   - aarch64
 # Uncomment when images are published to Docker Hub:
-# image: "effortlesshome/oasira-cloud-bridge:{version}-{arch}"
+image: "effortlesshome/oasira_addon-oasira-bridge:latest"
 options:
   email: ""
   password: ""
