@@ -6,6 +6,8 @@ set -e
 
 echo "📦 Copying dashboard dist folder..."
 if [ -d "../oasira-dashboard/dist" ]; then
+    # Clean old dist folder first
+    rm -rf oasira_cloud_bridge/dist
     cp -r ../oasira-dashboard/dist oasira_cloud_bridge/dist
     echo "✅ Dashboard dist copied successfully"
 else
@@ -14,11 +16,14 @@ else
 fi
 
 echo ""
-echo "🔨 Building Oasira Addon..."
+echo "🔨 Building Oasira Addon with optimizations..."
 cd oasira_cloud_bridge
 
-# Build the addon
-docker build -t oasira-addon:latest .
+# Build the addon with BuildKit for better caching
+DOCKER_BUILDKIT=1 docker build \
+    --build-arg BUILDKIT_INLINE_CACHE=1 \
+    --progress=plain \
+    -t oasira-addon:latest .
 
 cd ..
 echo ""

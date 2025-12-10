@@ -2,10 +2,12 @@
 *.md
 CHANGELOG.md
 DOCS.md
+README.md
 
 # Git
 .git
 .gitignore
+.gitattributes
 
 # Python
 *.pyc
@@ -17,6 +19,14 @@ __pycache__/
 *.egg
 *.egg-info
 build/
+.pytest_cache/
+*.coverage
+
+# Node.js (exclude from oasira-matter source, we rebuild anyway)
+oasira-matter/node_modules
+oasira-matter/.turbo
+oasira-matter/packages/*/node_modules
+oasira-matter/packages/*/dist
 
 # IDE
 .vscode/
@@ -24,5 +34,17 @@ build/
 *.swp
 *.swo
 *~
+.DS_Store
+
+# Test files
+**/tests/
+**/test/
+**/*.test.ts
+**/*.test.js
+**/*.spec.ts
+**/*.spec.js
+
+# Scripts not needed in container
+scripts/
 
 # Keep only the dist folder we explicitly copy

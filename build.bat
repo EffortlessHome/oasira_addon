@@ -3,6 +3,8 @@ REM Build script for Oasira addon with dashboard
 
 echo Copying dashboard dist folder...
 if exist "..\oasira-dashboard\dist" (
+    REM Clean old dist folder first
+    if exist "oasira_cloud_bridge\dist" rmdir /S /Q "oasira_cloud_bridge\dist"
     xcopy /E /I /Y "..\oasira-dashboard\dist" "oasira_cloud_bridge\dist"
     echo Dashboard dist copied successfully
 ) else (
@@ -11,11 +13,12 @@ if exist "..\oasira-dashboard\dist" (
 )
 
 echo.
-echo Building Oasira Addon...
+echo Building Oasira Addon with optimizations...
 cd oasira_cloud_bridge
 
-REM Build the addon
-docker build -t oasira-addon:latest .
+REM Build the addon with BuildKit for better caching
+set DOCKER_BUILDKIT=1
+docker build --build-arg BUILDKIT_INLINE_CACHE=1 --progress=plain -t oasira-addon:latest .
 
 cd ..
 echo.
