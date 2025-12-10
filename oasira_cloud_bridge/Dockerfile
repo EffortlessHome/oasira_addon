@@ -16,9 +16,10 @@ RUN echo 'packages:' > pnpm-workspace.yaml && \
 COPY oasira-matter/packages/common/package.json ./packages/common/package.json
 COPY oasira-matter/packages/backend/package.json ./packages/backend/package.json
 
-# Install pnpm and dependencies - this layer will be cached if package.json unchanged
+# Install pnpm and dependencies - use prefer-frozen-lockfile as compromise
+# This tries to use lockfile but updates if there's a mismatch
 RUN npm install -g pnpm@10.20.0 && \
-    pnpm install --frozen-lockfile --filter @oasira-matter/common --filter @oasira-matter/backend
+    pnpm install --prefer-frozen-lockfile --filter @oasira-matter/common --filter @oasira-matter/backend
 
 # Copy source code AFTER installing dependencies (for better caching)
 COPY oasira-matter/packages/common ./packages/common
