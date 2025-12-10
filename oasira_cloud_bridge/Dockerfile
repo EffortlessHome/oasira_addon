@@ -1,6 +1,10 @@
 # Multi-stage build for oasira-matter backend
 FROM node:22-alpine AS matter-builder
 
+# Define build arguments for architecture mapping
+ARG TARGETARCH
+ARG BUILDPLATFORM
+
 WORKDIR /build
 
 # Copy package files first for better layer caching
@@ -29,10 +33,20 @@ COPY oasira-matter/packages/backend ./packages/backend
 RUN pnpm --filter @oasira-matter/common run build && \
     pnpm --filter @oasira-matter/backend run build && \
     echo "=== Cleaning up dev dependencies ===" && \
-    pnpm prune --prod --filter @oasira-matter/backend
+    CI=true pnpm prune --prod
 
 # Main runtime image
-FROM ghcr.io/home-assistant/aarch64-base:latest
+# Home Assistant base images: amd64-base, aarch64-base
+# Docker TARGETARCH provides: amd64, arm64
+# We need to map arm64 -> aarch64
+ARG TARGETARCH
+
+# Pull base images with explicit platform specification
+FROM --platform=linux/amd64 ghcr.io/home-assistant/amd64-base:latest AS base-amd64
+FROM --platform=linux/arm64 ghcr.io/home-assistant/aarch64-base:latest AS base-arm64
+
+# Select the appropriate base
+FROM base-${TARGETARCH} AS final
 
 # Install Python and Node.js runtime in single layer
 RUN apk add --no-cache python3 py3-pip nodejs npm
