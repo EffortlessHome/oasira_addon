@@ -80,6 +80,14 @@ COPY --from=matter-builder /build/packages/common/package.json /app/packages/com
 # Only copy production node_modules (much smaller after prune)
 COPY --from=matter-builder /build/node_modules /app/node_modules
 COPY --from=matter-builder /build/package.json /app/package.json
+COPY --from=matter-builder /build/pnpm-workspace.yaml /app/pnpm-workspace.yaml
+COPY --from=matter-builder /build/pnpm-lock.yaml /app/pnpm-lock.yaml
+
+# Ensure yargs and other runtime dependencies are available
+# Install pnpm and reinstall production dependencies to fix symlinks
+RUN npm install -g pnpm@10.20.0 && \
+    cd /app && \
+    CI=true pnpm install --prod --prefer-offline --no-frozen-lockfile
 
 # Create Matter data directory
 RUN mkdir -p /data/matter
