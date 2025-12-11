@@ -523,7 +523,8 @@ async def start_matter_backend():
             env["STORAGE_PATH"] = "/data/matter"
             env["HA_URL"] = ha_url or ""
             env["HA_TOKEN"] = ha_token or ""
-            env["NODE_PATH"] = "/app/node_modules"
+            # Set NODE_PATH to include both pnpm store and node_modules
+            env["NODE_PATH"] = "/app/node_modules:/app/node_modules/.pnpm/node_modules"
             
             print(f"   - HA_URL: {ha_url}")
             print(f"   - Storage: /data/matter")
@@ -532,6 +533,7 @@ async def start_matter_backend():
             # Start Matter backend as subprocess
             matter_backend_process = await asyncio.create_subprocess_exec(
                 "node",
+                "--experimental-specifier-resolution=node",
                 str(cli_path),
                 "start",
                 "--storage-location", "/data/matter",
@@ -539,7 +541,7 @@ async def start_matter_backend():
                 "--home-assistant-url", ha_url or "",
                 "--home-assistant-access-token", ha_token or "",
                 env=env,
-                cwd="/app",
+                cwd="/app/packages/backend",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
