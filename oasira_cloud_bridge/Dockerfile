@@ -1,90 +1,32 @@
-# Multi-stage build for oasira-matter backend
-FROM node:22-alpine AS matter-builder
+#============================#
+#   OASIRA ADDON DOCKERFILE  #
+#============================#
+# This Dockerfile is not used when build.json is present
+# Home Assistant pulls pre-built images from Docker Hub via build.json
+# The actual images are built separately and pushed to effortlesshome/oasiracloudbridge
 
-# Define build arguments for architecture mapping
-ARG TARGETARCH
-ARG BUILDPLATFORM
+ARG BUILD_FROM
+FROM ${BUILD_FROM}
 
-WORKDIR /build
+# This is a placeholder Dockerfile required by Home Assistant
+# The actual addon uses pre-built images specified in build.json:
+# - effortlesshome/oasiracloudbridge:latest-amd64
+# - effortlesshome/oasiracloudbridge:latest-aarch64
 
-# Copy package files first for better layer caching
-COPY oasira-matter/package.json oasira-matter/pnpm-lock.yaml ./
-COPY oasira-matter/biome.json ./
+# Labels for Home Assistant
+ARG BUILD_ARCH
+ARG BUILD_DATE
+ARG BUILD_DESCRIPTION
+ARG BUILD_NAME
+ARG BUILD_REF
+ARG BUILD_REPOSITORY
+ARG BUILD_VERSION
 
-# Create modified pnpm-workspace.yaml without apps and frontend
-RUN echo 'packages:' > pnpm-workspace.yaml && \
-    echo '  - "packages/common"' >> pnpm-workspace.yaml && \
-    echo '  - "packages/backend"' >> pnpm-workspace.yaml
+LABEL \
+    io.hass.name="${BUILD_NAME}" \
+    io.hass.description="${BUILD_DESCRIPTION}" \
+    io.hass.arch="${BUILD_ARCH}" \
+    io.hass.type="addon" \
+    io.hass.version=${BUILD_VERSION} \
+    maintainer="Oasira (https://github.com/EffortlessHome)"
 
-# Copy package.json files for each package before source code
-COPY oasira-matter/packages/common/package.json ./packages/common/package.json
-COPY oasira-matter/packages/backend/package.json ./packages/backend/package.json
-
-# Install pnpm and dependencies - use prefer-frozen-lockfile as compromise
-# This tries to use lockfile but updates if there's a mismatch
-RUN npm install -g pnpm@10.20.0 && \
-    pnpm install --prefer-frozen-lockfile --filter @oasira-matter/common --filter @oasira-matter/backend
-
-# Copy source code AFTER installing dependencies (for better caching)
-COPY oasira-matter/packages/common ./packages/common
-COPY oasira-matter/packages/backend ./packages/backend
-
-# Build packages
-RUN pnpm --filter @oasira-matter/common run build && \
-    pnpm --filter @oasira-matter/backend run build && \
-    echo "=== Cleaning up dev dependencies ===" && \
-    CI=true pnpm prune --prod
-
-# Main runtime image
-# Home Assistant base images: amd64-base, aarch64-base
-# Docker TARGETARCH provides: amd64, arm64
-# We need to map arm64 -> aarch64
-ARG TARGETARCH
-
-# Pull base images with explicit platform specification
-FROM --platform=linux/amd64 ghcr.io/home-assistant/amd64-base:latest AS base-amd64
-FROM --platform=linux/arm64 ghcr.io/home-assistant/aarch64-base:latest AS base-arm64
-
-# Select the appropriate base
-FROM base-${TARGETARCH} AS final
-
-# Install Python and Node.js runtime in single layer
-RUN apk add --no-cache python3 py3-pip nodejs npm
-
-# Copy requirements first for better caching
-COPY requirements.txt /requirements.txt
-
-# Create and use a virtual environment for Python packages
-# This layer will be cached if requirements.txt hasn't changed
-RUN python3 -m venv /venv \
-    && . /venv/bin/activate \
-    && pip install --no-cache-dir -r /requirements.txt \
-    && pip install --no-cache-dir aiohttp websockets==12.0 Brotli
-
-# Copy scripts
-COPY run.py /run.py
-RUN chmod +x /run.py
-
-COPY run.sh /run.sh
-RUN chmod +x /run.sh
-
-# Copy dashboard dist folder (includes .gitkeep if empty)
-COPY dist /app/dist
-
-# Copy built Matter backend from builder stage - only production files
-COPY --from=matter-builder /build/packages/backend/dist /app/packages/backend/dist
-COPY --from=matter-builder /build/packages/common/dist /app/packages/common/dist
-COPY --from=matter-builder /build/packages/backend/package.json /app/packages/backend/package.json
-COPY --from=matter-builder /build/packages/common/package.json /app/packages/common/package.json
-# Only copy production node_modules (much smaller after prune)
-COPY --from=matter-builder /build/node_modules /app/node_modules
-COPY --from=matter-builder /build/package.json /app/package.json
-
-# Create Matter data directory
-RUN mkdir -p /data/matter
-
-WORKDIR /app
-
-ENV PATH="/venv/bin:$PATH"
-
-CMD ["/run.sh"]

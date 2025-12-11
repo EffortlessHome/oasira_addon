@@ -40,7 +40,7 @@ docker buildx build ^
     --tag %IMAGE_NAME%:%VERSION%-amd64 ^
     --tag %IMAGE_NAME%:latest-amd64 ^
     --push ^
-    --file Dockerfile ^
+    --file Dockerfile.local ^
     .
 
 if errorlevel 1 (
@@ -59,7 +59,7 @@ docker buildx build ^
     --tag %IMAGE_NAME%:%VERSION%-aarch64 ^
     --tag %IMAGE_NAME%:latest-aarch64 ^
     --push ^
-    --file Dockerfile ^
+    --file Dockerfile.local ^
     .
 
 if errorlevel 1 (
