@@ -7,10 +7,5 @@
 **/.vscode
 **/.idea
 
-# Keep only what we need from oasira-dashboard
-oasira-dashboard/*
-!oasira-dashboard/dist
-!oasira-dashboard/package.json
-!oasira-dashboard/package-lock.json
 
 # When using multi-stage build (Dockerfile), comment out the above exclusions
