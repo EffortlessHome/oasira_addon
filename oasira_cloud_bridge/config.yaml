@@ -1,5 +1,5 @@
 name: "Oasira Cloud Bridge"
-version: "1.1.41"
+version: "1.1.42"
 slug: "oasira_bridge"
 description: "Connects Home Assistant to the Oasira Cloud WebSocket service and registers connection info"
 startup: services
