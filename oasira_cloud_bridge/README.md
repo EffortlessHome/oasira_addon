@@ -28,26 +28,25 @@ Both interfaces run on the **same port (8080)** for simplified access.
 ## Configuration
 
 ```yaml
-email: your-email@example.com
-password: your-password
-system_id: your-system-id (optional if you have only one system)
-ha_url: http://homeassistant.local:8123
+care_api_url: https://your-oasira-care-api.example.com
+enrollment_code: ABCD-EFGH-JKLM
+node_name: Front Desk Hub
 dashboard_port: 8080
 ```
 
 ### Configuration Options
 
-- `email` (required): Your Oasira account email
-- `password` (required): Your Oasira account password
-- `system_id` (optional): Specific system ID if you have multiple systems
-- `ha_url` (required): Home Assistant URL (default: http://homeassistant.local:8123)
+- `care_api_url` (required): Base URL of your Oasira Care API
+- `enrollment_code` (required for first start): One-time pairing code issued by a facility admin in Oasira Care. It is exchanged for a revocable node key stored in `/data/care_node.json`, so the code can be cleared afterwards.
+- `node_name` (optional): Name shown for this node in Oasira Care
+- `ha_url` / `ha_token` (optional): Override the Home Assistant URL and token. By default both are supplied by Oasira Care (set per hub in the facility's Hub Provisioning panel).
 - `dashboard_port` (optional): Port for web interface (default: 8080)
 
 ## Installation
 
 1. Add this repository to your Home Assistant add-on store
 2. Install the "Oasira Cloud Bridge" add-on
-3. Configure your credentials
+3. Enter the Care API URL and a pairing code from Oasira Care
 4. Start the add-on
 5. Access the dashboard at `http://[homeassistant-ip]:8080/`
 6. Access Matter Hub at `http://[homeassistant-ip]:8080/matter/`

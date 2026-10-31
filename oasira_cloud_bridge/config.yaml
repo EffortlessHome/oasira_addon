@@ -19,15 +19,15 @@ arch:
   - amd64
   - aarch64
 options:
-  email: ""
-  password: ""
-  system_id: ""
+  care_api_url: ""
+  enrollment_code: ""
+  node_name: ""
   matter_label: "favorite"
   dashboard_port: 8080
 schema:
-  email: str
-  password: password
-  system_id: str?
+  care_api_url: str
+  enrollment_code: str?
+  node_name: str?
   matter_label: str?
   dashboard_port: int
 environment:

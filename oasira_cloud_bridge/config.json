@@ -8,9 +8,9 @@
   "boot": "auto",
   "map": ["config:rw"],
   "options": {
-    "email": "",
-    "password": "",
-    "system_id": "",
+    "care_api_url": "",
+    "enrollment_code": "",
+    "node_name": "",
     "matter_label": "favorite",
     "dashboard_port": 8080,
     "send_on_start": true,
@@ -18,9 +18,9 @@
     "show_token_in_logs": false
   },
   "schema": {
-    "email": "str",
-    "password": "password",
-    "system_id": "str?",
+    "care_api_url": "str",
+    "enrollment_code": "str?",
+    "node_name": "str?",
     "matter_label": "str?",
     "dashboard_port": "int",
     "send_on_start": "bool",
