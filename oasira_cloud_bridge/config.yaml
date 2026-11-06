@@ -1,0 +1,40 @@
+
+name: "Oasira Cloud"
+version: 2.1.0
+slug: "Oasira_bridge"
+description: "Oasira Cloud for Home Assistant with Matter Hub support"
+
+startup: services
+boot: auto
+init: false
+host_network: true
+host_ipc: false
+host_pid: false
+hassio_api: true
+homeassistant_api: true
+arch:
+  - aarch64
+  - amd64
+map:
+  - "config:rw"
+options:
+  care_api_url: ""
+  enrollment_code: ""
+  node_name: ""
+  matter_label: "favorite"
+  ha_url: ""
+  ha_token: ""
+ 
+schema:
+  care_api_url: str
+  enrollment_code: str?
+  node_name: str?
+  matter_label: str?
+  ha_url: str?
+  ha_token: str?
+
+environment:
+  TUNNEL_ORIGIN_CERT: "/cert.pem"
+privileged:
+  - NET_ADMIN
+  - SYS_ADMIN

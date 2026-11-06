@@ -1,0 +1,6 @@
+{
+    "build_from": {
+        "aarch64": "effortlesshome/oasirahomecloudbridge:latest-aarch64",
+        "amd64": "effortlesshome/oasirahomecloudbridge:latest-amd64"
+    }
+}
