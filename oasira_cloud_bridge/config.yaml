@@ -1,7 +1,7 @@
 
-name: "Oasira Cloud"
-version: 2.1.0
-slug: "Oasira_bridge"
+name: "Oasira Cloud Bridge"
+version: 2.1.1
+slug: "oasira_cloud_bridge"
 description: "Oasira Cloud for Home Assistant with Matter Hub support"
 
 startup: services
