@@ -32,13 +32,16 @@ Configure these values in the add-on's **Configuration** tab:
 
 | Option | Required | Default | Description |
 | --- | --- | --- | --- |
-| `api_url` | Yes | Empty | Custom Oasira API base URL. Used when `api_endpoint` does not select a known endpoint. |
-| `api_endpoint` | No | `careapi` | Oasira service endpoint. Supported values are `careapi`, `propertyapi`, and `homeapi`. |
+| `api_endpoint` | Yes | `careapi` | Oasira API endpoint. Choose `careapi`, `propertyapi`, or `homeapi`. |
+| `api_url` | No | Empty | Optional custom API base URL. When set, it overrides the selected endpoint. |
 | `enrollment_code` | No on subsequent starts | Empty | One-time pairing code issued by Oasira Care. |
 | `node_name` | No | `Home Assistant add-on` | Display name used for the enrolled Home Assistant node. |
 
-The default `careapi` endpoint resolves to `https://careapi.oasira.ai`. Use
-`api_url` only when a custom API endpoint is required.
+The supported endpoint selections resolve as follows:
+
+- `careapi` -> `https://careapi.oasira.ai`
+- `propertyapi` -> `https://propertyapi.oasira.ai`
+- `homeapi` -> `https://homeapi.oasira.ai`
 
 ## First startup
 
