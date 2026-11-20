@@ -1,18 +1,12 @@
 # Oasira Home Assistant Add-on
 
-The Oasira Cloud Bridge connects your Home Assistant installation to Oasira
-Cloud. It pairs the installation with an Oasira Care facility, retrieves the
-Home Assistant connection details provisioned for that facility, and starts a
-Cloudflare Tunnel when one is available.
-
-Your Home Assistant installation and the bridge credentials remain on your own
-hardware.
+The Oasira Cloud Bridge connects your Home Assistant installation to Oasira Cloud. 
 
 ## Requirements
 
 - An existing Home Assistant installation
 - A supported add-on architecture: `aarch64` or `amd64`
-- An Oasira account with access to Oasira Care
+- An Oasira account
 - A one-time enrollment code for the Home Assistant node
 - Home Assistant connection details provisioned in the facility's Hub
   Provisioning panel
@@ -51,18 +45,12 @@ are stored in `/data/care_node.json`.
 The bridge then retrieves the Home Assistant URL and token configured in
 Oasira Care. If Hub Provisioning has not supplied that connection information,
 the bridge will report that it cannot start and you must configure it in
-Oasira Care.
+Oasira.
 
 After enrollment, the saved node key is reused, verified with Oasira Cloud, and
 the spent enrollment code is no longer required. The key can be revoked from
-Oasira Care; if revoked, issue a new enrollment code and enroll the node again.
+Oasira; if revoked, issue a new enrollment code and enroll the node again.
 
-## Remote access
-
-When Oasira Care provides a Cloudflare Tunnel token for the enrolled node, the
-add-on downloads the matching `cloudflared` binary if needed and starts the
-tunnel. If no tunnel is configured yet, the bridge continues checking and can
-start it after tunnel provisioning is completed.
 
 ## Runtime details
 
