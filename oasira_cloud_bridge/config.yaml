@@ -1,6 +1,6 @@
 
 name: "Oasira Cloud Bridge"
-version: 2.1.5
+version: 2.1.6
 slug: "oasira_cloud_bridge"
 description: "Connects Home Assistant to the Oasira Cloud service and registers connection info"
 
